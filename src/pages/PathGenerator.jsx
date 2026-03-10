@@ -94,7 +94,14 @@ const geminiRequest = async (apiKey, body, setLoadingMsg) => {
 
             const data = await res.json();
             const text = data.choices[0].message.content;
-            return JSON.parse(text);
+            let jsonStr = text;
+            const match = text.match(/\{[\s\S]*\}/);
+            if (match) {
+                jsonStr = match[0];
+            } else {
+                jsonStr = text.replace(/```json\n?/g, '').replace(/```/g, '').trim();
+            }
+            return JSON.parse(jsonStr);
         } catch (error) {
             // If this is our own timeout error, re-throw it
             if (error.message.includes('timed out')) throw error;
@@ -161,7 +168,13 @@ const geminiTextFetch = async (apiKey, promptText, onStatus) => {
 
             const raw = await res.json();
             const text = raw?.choices?.[0]?.message?.content || '';
-            const jsonStr = text.replace(/```json\n?/g, '').replace(/```/g, '').trim();
+            let jsonStr = text;
+            const match = text.match(/\{[\s\S]*\}/);
+            if (match) {
+                jsonStr = match[0];
+            } else {
+                jsonStr = text.replace(/```json\n?/g, '').replace(/```/g, '').trim();
+            }
             return JSON.parse(jsonStr);
         } catch (error) {
             if (error.message.includes('timed out')) throw error;
@@ -187,12 +200,22 @@ export default function PathGenerator() {
         level: '1',
         weeks: '4'
     });
+    const [hasStartedGeneration, setHasStartedGeneration] = useState(false);
 
     const domains = [
         { id: 'it', label: 'IT & Software' },
         { id: 'non-it', label: 'Business & Non-IT' },
         { id: 'lang', label: 'Languages' }
     ];
+
+    const getDomainLabel = (id) => {
+        const found = [
+            { id: 'it', label: 'IT & Software' },
+            { id: 'non-it', label: 'Business & Non-IT' },
+            { id: 'lang', label: 'Languages' }
+        ].find(d => d.id === id);
+        return found ? found.label : id;
+    };
 
     const [generatedData, setGeneratedData] = useState(null);
     const [selectedAnswers, setSelectedAnswers] = useState({});
@@ -243,7 +266,7 @@ export default function PathGenerator() {
         const loadActivePath = async () => {
             if (user?.id) {
                 const activePath = await fetchActiveLearningPath(user.id);
-                if (activePath && activePath.path_data) {
+                if (activePath && activePath.path_data && !hasStartedGeneration) {
                     setFormData({
                         skill: activePath.skill,
                         domain: activePath.domain,
@@ -284,6 +307,8 @@ export default function PathGenerator() {
         }
 
         setStep(2);
+        setHasStartedGeneration(true);
+        setCurrentQuestionIndex(0);
 
         try {
             const apiKey = import.meta.env.VITE_GROQ_API_KEY;
@@ -293,9 +318,12 @@ export default function PathGenerator() {
                 return;
             }
 
+            const domainLabel = getDomainLabel(currentForm.domain);
+            const isNonProgramming = currentForm.domain === 'lang' || currentForm.domain === 'non-it';
+
             const prompt = `Generate a complete learning curriculum as a JSON object for the skill: ${currentForm.skill}.
 
-Domain: ${currentForm.domain}
+Domain: ${domainLabel}
 User Level: ${currentForm.level}
 Duration: ${currentForm.weeks} weeks.
 
@@ -307,7 +335,8 @@ Rules:
 5. Each day must have: day number, topic title, content explanation (2+ sentences), duration (e.g. "2 hours"), and practice_suggestion.
 6. Also include a 5-question pre-assessment exam with text, options array (4 choices), and answerIndex (0-3).
 
-IMPORTANT: The entire curriculum must be SPECIFICALLY about "${currentForm.skill}". Do NOT generate a generic curriculum.
+IMPORTANT: The entire curriculum must be SPECIFICALLY about "${currentForm.skill}" in the context of "${domainLabel}". Do NOT generate a generic curriculum.${isNonProgramming ? `
+CRITICAL: This is a "${domainLabel}" curriculum, NOT a programming curriculum. Do NOT include any Python, JavaScript, or coding topics. All content must be about "${currentForm.skill}" only.` : ''}
 
 Respond with ONLY a valid JSON object in this exact format, no extra text:
 {
@@ -326,18 +355,21 @@ Respond with ONLY a valid JSON object in this exact format, no extra text:
             const data = await geminiTextFetch(apiKey, prompt, (msg) => console.log(msg));
 
             // Part 4: Prevent Duplicate Content
-            const allTopics = data.path.flatMap(w => w.days.map(d => d.topic.toLowerCase().trim()));
-            const uniqueTopics = new Set(allTopics);
-            if (uniqueTopics.size < allTopics.length) {
-                console.log("Duplicate topics detected. Regenerating curriculum...");
-                return handleGenerate(e); // Simple recursion for one-time fix
+            const pathArrayCheck = data.path || data.curriculum || data.weeks;
+            if (pathArrayCheck && Array.isArray(pathArrayCheck)) {
+                const allTopics = pathArrayCheck.flatMap(w => (w.days || []).map(d => (d.topic || '').toLowerCase().trim()));
+                const uniqueTopics = new Set(allTopics);
+                if (uniqueTopics.size < allTopics.length) {
+                    console.log("Duplicate topics detected. Regenerating curriculum...");
+                    return handleGenerate(e); // Simple recursion for one-time fix
+                }
             }
 
             setGeneratedData(data);
 
             // Part 3: Store structured data in Supabase
             if (user?.id) {
-                const pathArray = data.path || [];
+                const pathArray = data.path || data.curriculum || data.weeks || [];
                 const savedPath = await saveLearningPath(user.id, {
                     domain: currentForm.domain,
                     skill: currentForm.skill,
@@ -374,7 +406,7 @@ Respond with ONLY a valid JSON object in this exact format, no extra text:
             // Try Fallback Method
             console.log("Attempting Rule-Based Fallback generation...");
             try {
-                const fallbackData = getFallbackPath(formData.skill, formData.weeks);
+                const fallbackData = getFallbackPath(currentForm.skill, currentForm.weeks);
                 setGeneratedData(fallbackData);
                 setSelectedAnswers({});
                 setPathId(null);
@@ -959,7 +991,7 @@ Respond with ONLY a valid JSON object in this exact format, no extra text:
                                     </div>
 
                                     {/* Temporarily kept as "Reset/Start Over" - logic later to mark as complete/inactive */}
-                                    <button className="btn btn-primary w-full mt-6" onClick={() => { setStep(1); setCompletedDays({}); setGeneratedData(null); }}>
+                                    <button className="btn btn-primary w-full mt-6" onClick={() => { setStep(1); setCompletedDays({}); setGeneratedData(null); setHasStartedGeneration(false); }}>
                                         Restart Path Generator
                                     </button>
 

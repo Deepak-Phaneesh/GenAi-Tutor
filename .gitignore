@@ -131,3 +131,6 @@ dist
 frontend/dist/
 frontend/node_modules/
 frontend/.vite/
+
+test_groq.mjs
+test_groq2.mjs

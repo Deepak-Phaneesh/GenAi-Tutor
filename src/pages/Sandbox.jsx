@@ -83,7 +83,6 @@ export default function Sandbox() {
 
     const [output, setOutput] = useState('');
     const [isRunning, setIsRunning] = useState(false);
-    const [isEngineReady, setIsEngineReady] = useState(false);
 
     // AI Chat state
     const [messages, setMessages] = useState([
@@ -92,42 +91,12 @@ export default function Sandbox() {
     const [chatInput, setChatInput] = useState('');
     const [isTyping, setIsTyping] = useState(false);
 
-    const pyodideRef = useRef(null);
-    const outputBufferRef = useRef('');
+
 
     useEffect(() => {
         console.log("Groq key loaded:", !!import.meta.env.VITE_GROQ_API_KEY);
     }, []);
 
-    useEffect(() => {
-        const initPyodide = async () => {
-            try {
-                if (!window.loadPyodide) {
-                    const script = document.createElement('script');
-                    script.src = 'https://cdn.jsdelivr.net/pyodide/v0.23.4/full/pyodide.js';
-                    script.onload = async () => {
-                        pyodideRef.current = await window.loadPyodide({
-                            indexURL: 'https://cdn.jsdelivr.net/pyodide/v0.23.4/full/',
-                            stdout: (text) => { outputBufferRef.current += text + '\n'; },
-                            stderr: (text) => { outputBufferRef.current += text + '\n'; }
-                        });
-                        setIsEngineReady(true);
-                    };
-                    document.body.appendChild(script);
-                } else {
-                    pyodideRef.current = await window.loadPyodide({
-                        indexURL: 'https://cdn.jsdelivr.net/pyodide/v0.23.4/full/',
-                        stdout: (text) => { outputBufferRef.current += text + '\n'; },
-                        stderr: (text) => { outputBufferRef.current += text + '\n'; }
-                    });
-                    setIsEngineReady(true);
-                }
-            } catch (err) {
-                console.error("Pyodide loading error:", err);
-            }
-        };
-        initPyodide();
-    }, []);
 
     // Load practice task from Path Generator
     useEffect(() => {
@@ -201,26 +170,7 @@ export default function Sandbox() {
             return;
         }
 
-        if (selectedLang === 'python') {
-            if (!pyodideRef.current) {
-                setOutput('Python engine is still loading. Please wait a moment...');
-                setIsRunning(false);
-                return;
-            }
-            outputBufferRef.current = 'Running python main.py...\n';
-            try {
-                await pyodideRef.current.runPythonAsync(currentCode);
-                setOutput(outputBufferRef.current + '\n[Process completed with exit code 0]');
-            } catch (err) {
-                setOutput(outputBufferRef.current + '\n' + err.message + '\n[Process completed with exit code 1]');
-            } finally {
-                setIsRunning(false);
-            }
-            return;
-        }
-
-        // Use Piston API for C, C++, Java, JS, TS
-        // Use Piston API v1 for C, C++, Java, JS, TS
+        // Use Piston API for all languages including Python
         setOutput(`Compiling and running ${langConfig.name} via Remote Engine...\n`);
 
         try {
@@ -336,11 +286,11 @@ export default function Sandbox() {
                         <RotateCcw size={16} /> Reset
                     </button>
                     <button
-                        className={`btn btn-primary btn-sm btn-glow ${(isRunning || (!isEngineReady && selectedLang === 'python')) ? 'opacity-50' : ''}`}
+                        className={`btn btn-primary btn-sm btn-glow ${isRunning ? 'opacity-50' : ''}`}
                         onClick={runCode}
-                        disabled={isRunning || (!isEngineReady && selectedLang === 'python')}
+                        disabled={isRunning}
                     >
-                        <Play size={16} /> {isRunning ? 'Running...' : (!isEngineReady && selectedLang === 'python' ? 'Loading Engine...' : 'Run Code')}
+                        <Play size={16} /> {isRunning ? 'Running...' : 'Run Code'}
                     </button>
                 </div>
             </header>

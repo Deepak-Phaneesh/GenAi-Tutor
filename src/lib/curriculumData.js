@@ -157,29 +157,57 @@ export const getFallbackPath = (skill, weeks) => {
     // 1. Direct match
     let template = CURRICULUM_DATABASE[key];
 
-    // 2. Fuzzy match
+    // 2. Fuzzy match for programming languages only
     if (!template) {
         const match = Object.keys(CURRICULUM_DATABASE).find(k =>
             key.includes(k) || k.includes(key) || (k === 'javascript' && key.includes('js'))
         );
-        template = match ? CURRICULUM_DATABASE[match] : CURRICULUM_DATABASE["python"];
+        // Only use a programming template if it actually matches — never default to Python for non-programming skills
+        template = match ? CURRICULUM_DATABASE[match] : null;
     }
 
-    // Multiply the path based on weeks if needed (simple cloning for demo)
     const weeksCount = parseInt(weeks, 10);
     const finalPath = [];
 
+    if (template) {
+        // Use the matched programming template
+        for (let i = 0; i < weeksCount; i++) {
+            finalPath.push({
+                title: `${template.path[0].title} - Part ${i + 1}`,
+                days: [...template.path[0].days]
+            });
+        }
+        return { path: finalPath, exam: template.exam };
+    }
+
+    // 3. Generic fallback for any non-programming skill (languages, business, etc.)
+    const capitalSkill = skill.charAt(0).toUpperCase() + skill.slice(1);
+    const genericDays = [
+        { topic: `Introduction to ${capitalSkill}`, duration: '1 hour', explanation: `An overview of ${capitalSkill} — its importance, applications, and what you will learn in this path.`, key_concepts: ['Overview', 'Goals', 'Structure'], practice_task: `Research what ${capitalSkill} is used for and write a short summary.` },
+        { topic: `Core Fundamentals`, duration: '1.5 hours', explanation: `The foundational concepts of ${capitalSkill} that every learner must understand before advancing.`, key_concepts: ['Basics', 'Principles', 'Terminology'], practice_task: `List 5 key terms related to ${capitalSkill} and write a one-sentence definition for each.` },
+        { topic: `Practical Application`, duration: '2 hours', explanation: `Applying the basics of ${capitalSkill} in real-world scenarios to reinforce learning.`, key_concepts: ['Application', 'Practice', 'Examples'], practice_task: `Find a real-world example of ${capitalSkill} in use and describe how the concepts apply.` },
+        { topic: `Intermediate Concepts`, duration: '2 hours', explanation: `Advancing beyond the basics to explore more nuanced aspects of ${capitalSkill}.`, key_concepts: ['Intermediate level', 'Depth', 'Analysis'], practice_task: `Compare two different approaches or methods within ${capitalSkill}.` },
+        { topic: `Common Challenges`, duration: '1.5 hours', explanation: `Understanding the common pitfalls and challenges learners face in ${capitalSkill} and how to overcome them.`, key_concepts: ['Challenges', 'Problem solving', 'Strategy'], practice_task: `Identify one challenge you have faced when learning ${capitalSkill} and describe how you would solve it.` },
+        { topic: `Advanced Topics & Best Practices`, duration: '2 hours', explanation: `Exploring advanced aspects of ${capitalSkill} and following expert best practices for mastery.`, key_concepts: ['Advanced', 'Best Practices', 'Mastery'], practice_task: `Read one expert article or resource about ${capitalSkill} and summarize its key takeaways.` },
+    ];
+
     for (let i = 0; i < weeksCount; i++) {
         finalPath.push({
-            title: `${template.path[0].title} - Part ${i + 1}`,
-            days: [...template.path[0].days] // In real app, we'd have unique content for all weeks
+            week: i + 1,
+            title: `${capitalSkill} Mastery — Week ${i + 1}`,
+            days: genericDays.map((d, idx) => ({ day: idx + 1, ...d }))
         });
     }
 
-    return {
-        path: finalPath,
-        exam: template.exam
-    };
+    const genericExam = [
+        { text: `What is the primary focus of ${capitalSkill}?`, options: ['Theory and concepts', 'Practical application', 'Both theory and practice', 'Neither'], answerIndex: 2 },
+        { text: `Which approach is most effective for learning ${capitalSkill}?`, options: ['Memorization only', 'Practice and application', 'Reading textbooks only', 'Watching videos only'], answerIndex: 1 },
+        { text: `What is a key benefit of mastering ${capitalSkill}?`, options: ['Limited career options', 'Improved problem-solving', 'Reduced opportunities', 'No benefit'], answerIndex: 1 },
+        { text: `How should a beginner start learning ${capitalSkill}?`, options: ['Jump to advanced topics', 'Start with fundamentals', 'Skip to projects', 'Read research papers'], answerIndex: 1 },
+        { text: `What does consistent practice of ${capitalSkill} lead to?`, options: ['Stagnation', 'Skill deterioration', 'Gradual mastery', 'No improvement'], answerIndex: 2 },
+    ];
+
+    return { path: finalPath, exam: genericExam };
 };
 
 export const getFallbackAssessment = (skill) => {
@@ -188,27 +216,31 @@ export const getFallbackAssessment = (skill) => {
     // 1. Direct match
     let template = CURRICULUM_DATABASE[key];
 
-    // 2. Fuzzy match
+    // 2. Fuzzy match for programming skills only
     if (!template) {
         const match = Object.keys(CURRICULUM_DATABASE).find(k =>
             key.includes(k) || k.includes(key) || (k === 'javascript' && key.includes('js'))
         );
-        template = match ? CURRICULUM_DATABASE[match] : CURRICULUM_DATABASE["python"];
+        template = match ? CURRICULUM_DATABASE[match] : null;
     }
 
-    // Convert MCQ format to match the state expects
-    const mcqs = template.exam.map(q => ({
-        type: 'mcq',
-        text: q.text,
-        options: q.options,
-        answerIndex: q.answerIndex
-    }));
+    if (template) {
+        const mcqs = template.exam.map(q => ({
+            type: 'mcq',
+            text: q.text,
+            options: q.options,
+            answerIndex: q.answerIndex
+        }));
+        return mcqs;
+    }
 
-    // Add generic coding questions
-    const coding = [
-        { type: 'coding', text: `Write a small program in ${skill} that demonstrates the concept of Loops.` },
-        { type: 'coding', text: `Implement a function that validates a user's input string for minimum length.` }
+    // Generic assessment for non-programming skills
+    const capitalSkill = skill.charAt(0).toUpperCase() + skill.slice(1);
+    return [
+        { type: 'mcq', text: `What is the primary focus of ${capitalSkill}?`, options: ['Theory and concepts', 'Practical application', 'Both theory and practice', 'Neither'], answerIndex: 2 },
+        { type: 'mcq', text: `Which approach is most effective for learning ${capitalSkill}?`, options: ['Memorization only', 'Practice and application', 'Reading books only', 'Watching videos only'], answerIndex: 1 },
+        { type: 'mcq', text: `What is a key benefit of mastering ${capitalSkill}?`, options: ['Limited career options', 'Improved communication', 'Reduced opportunities', 'No benefit'], answerIndex: 1 },
+        { type: 'mcq', text: `How should a beginner start learning ${capitalSkill}?`, options: ['Jump to advanced topics', 'Start with fundamentals', 'Skip to complex projects', 'Read research papers'], answerIndex: 1 },
+        { type: 'mcq', text: `What does regular practice of ${capitalSkill} lead to?`, options: ['Stagnation', 'Skill deterioration', 'Gradual improvement', 'No change'], answerIndex: 2 },
     ];
-
-    return [...mcqs, ...coding];
 };

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../lib/AuthContext';
-import { fetchUserProgress } from '../lib/progress';
+import { fetchUserProgress, updateLoginStreak } from '../lib/progress';
 import { fetchLearningSessions, fetchAssessmentsTaken, fetchActiveLearningPath, fetchLearningPathTopics, fetchLearningPathAssessments, fetchActiveLearningPaths } from '../lib/analytics';
 import { supabase } from '../lib/supabaseClient';
 import {
@@ -62,6 +62,8 @@ export default function Dashboard() {
     useEffect(() => {
         if (user?.id) {
             const fetchData = async () => {
+                // Update login streak first (idempotent — safe to call every render)
+                await updateLoginStreak(user.id);
                 const dbProgress = await fetchUserProgress(user.id);
 
 
