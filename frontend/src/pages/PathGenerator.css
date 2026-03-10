@@ -1,0 +1,354 @@
+.path-container {
+    display: flex;
+    flex-direction: column;
+}
+
+.page-header h1 {
+    font-size: 2.25rem;
+    margin-bottom: 0.25rem;
+}
+
+.generator-grid {
+    display: grid;
+    grid-template-columns: 2fr 1fr;
+    gap: 2rem;
+}
+
+@media (max-width: 900px) {
+    .generator-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+.generator-form {
+    padding: 2.5rem;
+}
+
+.form-section h3 {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    font-size: 1.25rem;
+    margin-bottom: 1.5rem;
+    color: var(--text-primary);
+    border-bottom: 1px solid var(--border-light);
+    padding-bottom: 0.75rem;
+}
+
+/* Radio Grid overrides */
+.radio-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 1rem;
+}
+
+.radio-card.small {
+    padding: 1rem;
+    font-size: 0.95rem;
+    font-weight: 500;
+}
+
+/* Range Slider */
+.range-wrapper {
+    padding: 1rem 0;
+}
+
+.range-slider {
+    -webkit-appearance: none;
+    width: 100%;
+    height: 6px;
+    background: var(--bg-tertiary);
+    border-radius: 3px;
+    outline: none;
+    margin-bottom: 1.5rem;
+}
+
+.range-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: var(--accent-primary);
+    cursor: pointer;
+    box-shadow: 0 0 10px rgba(99, 102, 241, 0.5);
+    transition: transform var(--transition-fast);
+}
+
+.range-slider::-webkit-slider-thumb:hover {
+    transform: scale(1.2);
+}
+
+.range-labels {
+    display: flex;
+    justify-content: space-between;
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    font-weight: 500;
+}
+
+/* Info Side Panel */
+.info-card {
+    padding: 2rem;
+    position: sticky;
+    top: 2rem;
+}
+
+.info-list {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.info-list li {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+    color: var(--text-secondary);
+    font-size: 0.95rem;
+    line-height: 1.4;
+}
+
+.info-list li svg {
+    flex-shrink: 0;
+    margin-top: 0.15rem;
+}
+
+/* Loading State Animation */
+.loading-state {
+    padding: 4rem 2rem;
+    max-width: 600px;
+    margin: 4rem auto;
+}
+
+.ai-loader {
+    position: relative;
+    width: 120px;
+    height: 120px;
+    margin: 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.ring {
+    position: absolute;
+    border-radius: 50%;
+    border: 2px solid transparent;
+    border-top-color: var(--accent-primary);
+    border-bottom-color: var(--accent-secondary);
+    animation: spin 3s linear infinite;
+}
+
+.ring-1 {
+    width: 100%;
+    height: 100%;
+    border-width: 3px;
+}
+
+.ring-2 {
+    width: 80%;
+    height: 80%;
+    animation-direction: reverse;
+    animation-duration: 2s;
+    border-top-color: var(--accent-tertiary);
+    border-bottom-color: var(--accent-primary);
+}
+
+.ring-3 {
+    width: 60%;
+    height: 60%;
+    animation-duration: 1.5s;
+    border-width: 1px;
+}
+
+@keyframes spin {
+    0% {
+        transform: rotate(0deg);
+    }
+
+    100% {
+        transform: rotate(360deg);
+    }
+}
+
+/* Base utilities used via classes */
+.align-center {
+    align-items: center;
+}
+
+.align-start {
+    align-items: flex-start;
+}
+
+.flex-wrap {
+    flex-wrap: wrap;
+}
+
+.gap-2 {
+    gap: 0.5rem;
+}
+
+.gap-4 {
+    gap: 1rem;
+}
+
+.text-lg {
+    font-size: 1.125rem;
+}
+
+.opacity-70 {
+    opacity: 0.7;
+}
+
+.opacity-50 {
+    opacity: 0.5;
+}
+
+.mx-auto {
+    margin-left: auto;
+    margin-right: auto;
+}
+
+.p-4 {
+    padding: 1rem;
+}
+
+.text-xs {
+    font-size: 0.75rem;
+}
+
+/* Exam State */
+.exam-card {
+    max-width: 700px;
+    margin: 2rem auto;
+    padding: 3rem;
+}
+
+.options-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.option-card {
+    text-align: left;
+    justify-content: flex-start;
+    padding: 1.25rem 1.5rem;
+}
+
+.option-card:hover {
+    transform: translateX(4px);
+}
+
+.q-number {
+    font-size: 0.85rem;
+    color: var(--accent-primary);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+/* Result Timeline */
+.result-header {
+    padding: 2rem;
+}
+
+.timeline-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+    gap: 1.5rem;
+}
+
+.timeline-week {
+    padding: 1.5rem;
+}
+
+.week-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid var(--border-light);
+}
+
+.days-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.day-item {
+    display: flex;
+    align-items: stretch;
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 8px;
+    overflow: hidden;
+    border: 1px solid transparent;
+    transition: border-color var(--transition-fast);
+}
+
+.day-item:hover {
+    border-color: var(--border-light);
+}
+
+.day-marker {
+    background: var(--bg-tertiary);
+    width: 60px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 600;
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    flex-shrink: 0;
+}
+
+.day-content {
+    padding: 0.75rem 1rem;
+    flex-grow: 1;
+}
+
+.day-item.completed {
+    border-color: var(--success);
+    background: rgba(16, 185, 129, 0.05);
+    /* success light */
+}
+
+.day-item.completed .day-marker {
+    background: var(--success);
+    color: white;
+}
+
+.cursor-pointer {
+    cursor: pointer;
+}
+
+.hover-glow:hover {
+    box-shadow: 0 0 10px rgba(99, 102, 241, 0.2);
+    border-color: var(--accent-primary);
+}
+
+.pointer-events-none {
+    pointer-events: none;
+}
+
+.grayscale {
+    filter: grayscale(100%);
+}
+
+.assessment-day {
+    margin-top: 0.75rem;
+    border: 1px solid rgba(245, 158, 11, 0.3);
+}
+
+.assessment-day .day-marker.bg-dark {
+    background: var(--bg-primary);
+    color: var(--text-muted);
+}
+
+.assessment-day .day-marker {
+    color: #020617;
+    /* Dark text for contrast against bright warning bg */
+}
