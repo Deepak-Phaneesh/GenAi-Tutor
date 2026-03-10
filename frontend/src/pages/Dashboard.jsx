@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../lib/AuthContext';
 import { fetchUserProgress } from '../lib/progress';
-import { fetchLearningSessions, fetchAssessmentsTaken, fetchActiveLearningPath, fetchLearningPathTopics, fetchLearningPathAssessments } from '../lib/analytics';
+import { fetchLearningSessions, fetchAssessmentsTaken, fetchActiveLearningPath, fetchLearningPathTopics, fetchLearningPathAssessments, fetchActiveLearningPaths } from '../lib/analytics';
 import { supabase } from '../lib/supabaseClient';
 import {
     Clock,
@@ -32,17 +32,13 @@ import {
 } from 'recharts';
 import './Dashboard.css';
 
-// Keeping Pending Assessments and Recent Paths mock data for now
-const recentPaths = [
-    { id: 1, title: 'Junior Data Scientist Track', progress: 65, lastActive: '2 hours ago' },
-    { id: 2, title: 'Prompt Engineering 101', progress: 30, lastActive: '1 day ago' }
-];
+// Removed mock data for Pending Assessments and Recent Paths
 
 export default function Dashboard() {
     const { user } = useAuth();
     const [assessmentsTaken, setAssessmentsTaken] = useState([]);
+    const [recentPaths, setRecentPaths] = useState([]);
     const [userName, setUserName] = useState('');
-
 
     // Default metrics if DB is empty
     const [stats, setStats] = useState([
@@ -73,13 +69,14 @@ export default function Dashboard() {
                 setIsPieLoading(true);
                 setIsLineLoading(true);
                 setIsActivePathLoading(true);
-                const [sessionsData, topicsData, timelineData, recentAssessments, userProfileData, activePathsData] = await Promise.all([
+                const [sessionsData, topicsData, timelineData, recentAssessments, userProfileData, activePathsData, allPathsData] = await Promise.all([
                     fetchLearningSessions(user.id),
                     fetchLearningPathTopics(user.id),
                     fetchLearningPathAssessments(user.id),
                     fetchAssessmentsTaken(user.id), // Get array of recent assessments taken
                     supabase.from('users').select('name').eq('id', user.id).single(),
-                    fetchActiveLearningPath(user.id)
+                    fetchActiveLearningPath(user.id),
+                    fetchActiveLearningPaths(user.id)
                 ]);
 
                 // Update charts
@@ -109,6 +106,8 @@ export default function Dashboard() {
                 } else {
                     setActivePath(null);
                 }
+
+                setRecentPaths(allPathsData || []);
 
                 setIsPieLoading(false);
                 setIsLineLoading(false);
@@ -425,22 +424,28 @@ export default function Dashboard() {
                             <button className="btn-link">View All</button>
                         </div>
                         <div className="widget-list">
-                            {recentPaths.map(item => (
-                                <div key={item.id} className="widget-item">
-                                    <div className="widget-icon bg-primary-light">
-                                        <TrendingUp className="text-primary" size={18} />
-                                    </div>
-                                    <div className="widget-details w-full">
-                                        <h4>{item.title}</h4>
-                                        <div className="progress-wrapper">
-                                            <div className="progress-bar">
-                                                <div className="progress-fill" style={{ width: `${item.progress}%` }}></div>
+                            {recentPaths.length > 0 ? (
+                                recentPaths.map(item => (
+                                    <div key={item.id} className="widget-item">
+                                        <div className="widget-icon bg-primary-light">
+                                            <TrendingUp className="text-primary" size={18} />
+                                        </div>
+                                        <div className="widget-details w-full">
+                                            <h4>{item.domain} - {item.skill}</h4>
+                                            <div className="progress-wrapper">
+                                                <div className="progress-bar">
+                                                    <div className="progress-fill" style={{ width: `${item.progress}%` }}></div>
+                                                </div>
+                                                <span className="progress-text">{item.progress}%</span>
                                             </div>
-                                            <span className="progress-text">{item.progress}%</span>
                                         </div>
                                     </div>
+                                ))
+                            ) : (
+                                <div className="text-center text-secondary py-4 w-full">
+                                    <p className="text-sm">No recent paths found.<br />Start generating paths to see them here.</p>
                                 </div>
-                            ))}
+                            )}
                         </div>
                     </div>
                 </div>
