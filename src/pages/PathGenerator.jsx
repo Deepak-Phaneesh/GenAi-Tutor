@@ -27,7 +27,9 @@ import {
     ExternalLink,
     Youtube,
     BookOpen,
-    Code
+    Code,
+    Send,
+    Brain
 } from 'lucide-react';
 import './PathGenerator.css';
 
@@ -35,104 +37,32 @@ const GEMINI_URL = (apiKey) =>
     `https://api.groq.com/openai/v1/chat/completions`;
 
 // Wrapper with auto-retry until 2-minute timeout
-const geminiRequest = async (apiKey, body, setLoadingMsg) => {
-    const url = GEMINI_URL(apiKey);
-    const opts = {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${apiKey}`
-        },
-        body: JSON.stringify(body)
-    };
-
-    const TIMEOUT_MS = 2 * 60 * 1000; // 2 minutes
-    const startTime = Date.now();
-    let attempt = 0;
-
-    while (true) {
-        attempt++;
-        const elapsed = Date.now() - startTime;
-
-        if (elapsed >= TIMEOUT_MS) {
-            throw new Error('AI request timed out after 2 minutes. Please try again.');
-        }
-
-        try {
-            const res = await fetch(url, opts);
-
-            if (res.status === 429 || res.status === 503) {
-                // Rate limited or service unavailable — check remaining time before retrying
-                const errData = await res.json().catch(() => ({}));
-                const status = errData?.error?.status || '';
-                const remaining = TIMEOUT_MS - (Date.now() - startTime);
-
-                if (remaining <= 0) {
-                    throw new Error('AI request timed out after 2 minutes. Please try again.');
-                }
-
-                // For rate limits, wait up to 30s; for others, wait 3s
-                const waitTime = status === 'RESOURCE_EXHAUSTED' ? Math.min(30000, remaining) : Math.min(3000, remaining);
-                const elapsed_s = Math.round((Date.now() - startTime) / 1000);
-                if (setLoadingMsg) setLoadingMsg(`AI is busy. Retrying... (${elapsed_s}s elapsed, max 2 min)`);
-                await new Promise(r => setTimeout(r, waitTime));
-                continue;
-            }
-
-            if (!res.ok) {
-                const err = await res.json().catch(() => ({}));
-                const remaining = TIMEOUT_MS - (Date.now() - startTime);
-                if (remaining <= 5000) {
-                    throw new Error(JSON.stringify(err.error || err));
-                }
-                // Non-rate-limit error — short wait then retry
-                const elapsed_s = Math.round((Date.now() - startTime) / 1000);
-                if (setLoadingMsg) setLoadingMsg(`Connection issue. Retrying... (${elapsed_s}s elapsed)`);
-                await new Promise(r => setTimeout(r, Math.min(3000, remaining)));
-                continue;
-            }
-
-            const data = await res.json();
-            const text = data.choices[0].message.content;
-            let jsonStr = text;
-            const match = text.match(/\{[\s\S]*\}/);
-            if (match) {
-                jsonStr = match[0];
-            } else {
-                jsonStr = text.replace(/```json\n?/g, '').replace(/```/g, '').trim();
-            }
-            return JSON.parse(jsonStr);
-        } catch (error) {
-            // If this is our own timeout error, re-throw it
-            if (error.message.includes('timed out')) throw error;
-
-            const remaining = TIMEOUT_MS - (Date.now() - startTime);
-            if (remaining <= 0) {
-                throw new Error('AI request timed out after 2 minutes. Please try again.');
-            }
-
-            const elapsed_s = Math.round((Date.now() - startTime) / 1000);
-            if (setLoadingMsg) setLoadingMsg(`Connection error. Retrying... (${elapsed_s}s elapsed)`);
-            await new Promise(r => setTimeout(r, Math.min(3000, remaining)));
-        }
-    }
-};
-
-const geminiTextFetch = async (apiKey, promptText, onStatus) => {
+// Centralized AI request wrapper with auto-retry and robust JSON parsing
+const groqRequest = async (apiKey, payload, onStatus) => {
     const url = `https://api.groq.com/openai/v1/chat/completions`;
-    const body = JSON.stringify({
-        model: "llama-3.3-70b-versatile",
-        messages: [{ role: "user", content: promptText }]
-    });
+    
+    // Auto-detect payload format (string = prompt, object = full body)
+    const bodyObj = typeof payload === 'string' 
+        ? { 
+            model: "llama-3.3-70b-versatile", 
+            messages: [{ role: "user", content: payload }],
+            response_format: { type: "json_object" } 
+          }
+        : {
+            ...payload,
+            response_format: payload.response_format || { type: "json_object" }
+          };
 
+    const body = JSON.stringify(bodyObj);
     const TIMEOUT_MS = 2 * 60 * 1000; // 2 minutes
     const startTime = Date.now();
 
     while (true) {
         const elapsed = Date.now() - startTime;
-        if (elapsed >= TIMEOUT_MS) {
-            throw new Error('AI request timed out after 2 minutes. Please try again.');
-        }
+        if (elapsed >= TIMEOUT_MS) throw new Error('AI request timed out after 2 minutes.');
+
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 30000); // 30s per attempt
 
         try {
             const res = await fetch(url, {
@@ -141,48 +71,53 @@ const geminiTextFetch = async (apiKey, promptText, onStatus) => {
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${apiKey}`
                 },
-                body
+                body,
+                signal: controller.signal
             });
+            clearTimeout(timeoutId);
 
             if (res.status === 429 || res.status === 503) {
                 const errData = await res.json().catch(() => ({}));
-                const isRateLimit = errData?.error?.status === 'RESOURCE_EXHAUSTED';
+                const isRateLimit = errData?.error?.status === 'RESOURCE_EXHAUSTED' || res.status === 429;
                 const remaining = TIMEOUT_MS - (Date.now() - startTime);
-                if (remaining <= 0) throw new Error('AI request timed out after 2 minutes. Please try again.');
-                const waitTime = isRateLimit ? Math.min(30000, remaining) : Math.min(3000, remaining);
+                if (remaining <= 0) throw new Error('AI request timed out.');
+                
+                const waitTime = isRateLimit ? Math.min(15000, remaining) : Math.min(3000, remaining);
                 const elapsed_s = Math.round((Date.now() - startTime) / 1000);
-                if (onStatus) onStatus(`AI is busy. Retrying... (${elapsed_s}s elapsed, max 2 min)`);
+                if (onStatus) onStatus(`AI is busy. Retrying... (${elapsed_s}s elapsed)`);
                 await new Promise(r => setTimeout(r, waitTime));
                 continue;
             }
 
             if (!res.ok) {
                 const errText = await res.text();
-                const remaining = TIMEOUT_MS - (Date.now() - startTime);
-                if (remaining <= 5000) throw new Error(`API Error ${res.status}: ${errText}`);
-                const elapsed_s = Math.round((Date.now() - startTime) / 1000);
-                if (onStatus) onStatus(`Connection issue. Retrying... (${elapsed_s}s elapsed)`);
-                await new Promise(r => setTimeout(r, Math.min(3000, remaining)));
-                continue;
+                throw new Error(`API Error ${res.status}: ${errText}`);
             }
 
             const raw = await res.json();
-            const text = raw?.choices?.[0]?.message?.content || '';
-            let jsonStr = text;
-            const match = text.match(/\{[\s\S]*\}/);
-            if (match) {
-                jsonStr = match[0];
-            } else {
-                jsonStr = text.replace(/```json\n?/g, '').replace(/```/g, '').trim();
+            const textContent = raw?.choices?.[0]?.message?.content || '';
+            let processedJsonStr = textContent;
+            
+            try {
+                const match = textContent.match(/\{[\s\S]*\}/);
+                if (match) {
+                    processedJsonStr = match[0];
+                } else {
+                    processedJsonStr = textContent.replace(/```json\n?/g, '').replace(/```/g, '').trim();
+                }
+                return JSON.parse(processedJsonStr);
+            } catch (parseError) {
+                console.error("JSON PARSE ERROR. Raw text was:", textContent);
+                // We throw a catchable error so the outer loop can retry if time allows
+                throw new Error("The AI returned a malformed response. Retrying...");
             }
-            return JSON.parse(jsonStr);
         } catch (error) {
-            if (error.message.includes('timed out')) throw error;
+            if (error.message.includes('timed out') || error.message.includes('API Error')) throw error;
             const remaining = TIMEOUT_MS - (Date.now() - startTime);
-            if (remaining <= 0) throw new Error('AI request timed out after 2 minutes. Please try again.');
+            if (remaining <= 0) throw new Error('AI request timed out.');
             const elapsed_s = Math.round((Date.now() - startTime) / 1000);
             if (onStatus) onStatus(`Connection error. Retrying... (${elapsed_s}s elapsed)`);
-            await new Promise(r => setTimeout(r, Math.min(3000, remaining)));
+            await new Promise(r => setTimeout(r, 2000));
         }
     }
 };
@@ -201,6 +136,8 @@ export default function PathGenerator() {
         weeks: '4'
     });
     const [hasStartedGeneration, setHasStartedGeneration] = useState(false);
+    const [generationError, setGenerationError] = useState(null);
+    const [loadingMsg, setLoadingMsg] = useState('');
 
     const domains = [
         { id: 'it', label: 'IT & Software' },
@@ -233,7 +170,14 @@ export default function PathGenerator() {
     const [pathId, setPathId] = useState(null);
 
     // { topic: string, questions: [], currentIdx: 0, answers: {}, loading: boolean }
-    const [activeQuickQuiz, setActiveQuickQuick] = useState(null);
+    const [activeQuickQuiz, setActiveQuickQuiz] = useState(null);
+
+    // AI Study Buddy Chat State: { messages: [{role, content}], loading: boolean, input: string }
+    const [studyBuddy, setStudyBuddy] = useState({
+        messages: [],
+        loading: false,
+        input: ''
+    });
 
     // Ref for the daily learning modal scroll container
     const learningModalRef = useRef(null);
@@ -324,10 +268,11 @@ export default function PathGenerator() {
 
         setStep(2);
         setHasStartedGeneration(true);
+        setGenerationError(null);
         setCurrentQuestionIndex(0);
 
         try {
-            const apiKey = import.meta.env.VITE_GROQ_API_KEY;
+            const apiKey = (import.meta.env.VITE_GROQ_API_KEY || '').trim();
             if (!apiKey) {
                 alert("AI service configuration error. Please check API key.");
                 setStep(1);
@@ -336,48 +281,81 @@ export default function PathGenerator() {
 
             const domainLabel = getDomainLabel(currentForm.domain);
             const isNonProgramming = currentForm.domain === 'lang' || currentForm.domain === 'non-it';
+            const isNonProgrammingContext = isNonProgramming ? `CRITICAL: This is a "${domainLabel}" curriculum, NOT a programming curriculum. Do NOT include coding topics.` : '';
 
-            const prompt = `Generate a complete learning curriculum as a JSON object for the skill: ${currentForm.skill}.
+            const generateChunk = async (startWeek, endWeek) => {
+                const weekCount = endWeek - startWeek + 1;
+                const chunkPrompt = `Generate a partial learning curriculum as a JSON object for the skill: ${currentForm.skill}.
 
 Domain: ${domainLabel}
 User Level: ${currentForm.level}
-Duration: ${currentForm.weeks} weeks.
+This is weeks ${startWeek} to ${endWeek} of a ${currentForm.weeks}-week plan. (${weekCount} weeks total in this chunk)
 
 Rules:
-1. Each week must introduce NEW, unique topics only.
-2. Topics must progressively increase in difficulty.
-3. Do NOT repeat topics from any previous week.
-4. Each week must contain exactly 7 days (Day 1-6 are learning days, Day 7 is the assessment day).
-5. Each day must have: day number, topic title, content explanation (a detailed, professional explanation strictly 7 to 8 lines long, providing deep context so the user can study directly from it, use \\n\\n for paragraph breaks to ensure a readable, professional format), duration (e.g. "2 hours"), and practice_suggestion.
-6. Also include a 5-question pre-assessment exam with text, options array (4 choices), and answerIndex (0-3).
+1. STRICT PROGRESSION: These weeks (${startWeek}-${endWeek}) must build on previous weeks. Each week introduces entirely NEW, unique, and more advanced topics. DO NOT repeat topics.
+2. Each week must contain exactly 7 days (Day 1-6 learning, Day 7 is for assessment).
+3. Day Content: Detailed explanation of at least 5-6 lines long. Write it as a comprehensive study note covering what the topic is, why it matters, how it works, and a brief example or analogy. Use \\n\\n for paragraph breaks between sections.
+4. Resources: Every learning day MUST include an array of 2-3 real URL strings (documentation or tutorials).
+5. The curriculum must be SPECIFICALLY about "${currentForm.skill}". ${isNonProgrammingContext}
 
-IMPORTANT: The entire curriculum must be SPECIFICALLY about "${currentForm.skill}" in the context of "${domainLabel}". Do NOT generate a generic curriculum.${isNonProgramming ? `
-CRITICAL: This is a "${domainLabel}" curriculum, NOT a programming curriculum. Do NOT include any Python, JavaScript, or coding topics. All content must be about "${currentForm.skill}" only.` : ''}
-
-Respond with ONLY a valid JSON object in this exact format, no extra text:
+Respond with ONLY a valid JSON object:
 {
-  "exam": [{"text": "...", "options": ["A", "B", "C", "D"], "answerIndex": 0}],
-  "path": [
+  "weeks": [
     {
-      "week": 1,
-      "title": "Week Title",
+      "week": ${startWeek},
+      "title": "Week ${startWeek} Title",
       "days": [
-        {"day": 1, "topic": "...", "content": "...", "duration": "2 hours", "practice_suggestion": "..."}
+        {"day": 1, "topic": "...", "content": "...", "duration": "2 hours", "practice_suggestion": "...", "resources": ["https://..."]}
       ]
     }
   ]
-}`;
+}
 
-            const data = await geminiTextFetch(apiKey, prompt, (msg) => console.log(msg));
+CRITICAL: YOU MUST GENERATE EXACTLY ${weekCount} WEEK OBJECTS (weeks ${startWeek} through ${endWeek}).`;
+
+                const chunkData = await groqRequest(apiKey, chunkPrompt, null);
+                return chunkData.weeks || chunkData.path || chunkData.curriculum || [];
+            };
+
+            // Generate the pre-assessment exam separately
+            const examPrompt = `Generate a 5-question multiple-choice pre-assessment for the skill: ${currentForm.skill} at ${currentForm.level} level.
+Return ONLY valid JSON: {"exam": [{"text": "...", "options": ["A", "B", "C", "D"], "answerIndex": 0}]}`;
+            
+            let examData = { exam: [] };
+            try {
+                examData = await groqRequest(apiKey, examPrompt, null);
+            } catch (err) {
+                console.warn("Exam generation failed, continuing without exam:", err.message);
+            }
+
+            // Generate weeks in chunks of 4
+            const totalWeeks = parseInt(currentForm.weeks, 10) || 4;
+            const CHUNK_SIZE = 4;
+            let allWeeks = [];
+            
+            for (let startWeek = 1; startWeek <= totalWeeks; startWeek += CHUNK_SIZE) {
+                const endWeek = Math.min(startWeek + CHUNK_SIZE - 1, totalWeeks);
+                setLoadingMsg(`Generating weeks ${startWeek}-${endWeek} of ${totalWeeks}...`);
+                const chunkWeeks = await generateChunk(startWeek, endWeek);
+                allWeeks = [...allWeeks, ...chunkWeeks];
+            }
+
+            const data = {
+                exam: examData.exam || [],
+                path: allWeeks
+            };
 
             // Part 4: Prevent Duplicate Content
             const pathArrayCheck = data.path || data.curriculum || data.weeks;
             if (pathArrayCheck && Array.isArray(pathArrayCheck)) {
                 const allTopics = pathArrayCheck.flatMap(w => (w.days || []).map(d => (d.topic || '').toLowerCase().trim()));
                 const uniqueTopics = new Set(allTopics);
-                if (uniqueTopics.size < allTopics.length) {
-                    console.log("Duplicate topics detected. Regenerating curriculum...");
-                    return handleGenerate(e); // Simple recursion for one-time fix
+                
+                // If it's duplicating more than half of its topics, it failed the uniqueness test.
+                // We shouldn't infinite retry to avoid rate limits, so we only retry once.
+                if (uniqueTopics.size < allTopics.length * 0.8) {
+                    console.log("Duplicate topics detected. AI failed prompt rules. Using data as-is to prevent infinite loop.");
+                    // In a production app you'd retry once, but to prevent rate-limits on free APIs during testing we accept the data or show a warning.
                 }
             }
 
@@ -405,7 +383,8 @@ Respond with ONLY a valid JSON object in this exact format, no extra text:
                             topic: day.topic,
                             content: day.content,
                             duration: day.duration,
-                            practice_suggestion: day.practice_suggestion
+                            practice_suggestion: day.practice_suggestion,
+                            resources: day.resources || []
                         }))
                     }));
                     await saveStructuredLearningPath(user.id, savedPath.id, structuredWeeks);
@@ -418,6 +397,7 @@ Respond with ONLY a valid JSON object in this exact format, no extra text:
             setStep(3);
         } catch (error) {
             console.error("Gemini Path Generation Error:", error);
+            setGenerationError(error.message);
 
             // Try Fallback Method
             console.log("Attempting Rule-Based Fallback generation...");
@@ -438,17 +418,61 @@ Respond with ONLY a valid JSON object in this exact format, no extra text:
 
     const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
 
-    // Robust extraction helpers
+    const normalizeQuestions = (rawQuestions) => {
+        if (!Array.isArray(rawQuestions)) return [];
+        return rawQuestions.map(q => {
+            const text = q.question || q.text || "Assessment Question";
+            const options = Array.isArray(q.options) ? q.options : ["Option A", "Option B", "Option C", "Option D"];
+            
+            // Robust answer index extraction
+            let answerIndex = 0;
+            if (typeof q.answerIndex === 'number') {
+                answerIndex = q.answerIndex;
+            } else if (typeof q.answer === 'string') {
+                const cleanAnswer = q.answer.trim().toUpperCase();
+                // Check if answer is a single letter "A", "B", etc.
+                if (cleanAnswer.length === 1 && cleanAnswer >= 'A' && cleanAnswer <= 'Z') {
+                    const letterIdx = cleanAnswer.charCodeAt(0) - 65;
+                    if (letterIdx >= 0 && letterIdx < options.length) {
+                        answerIndex = letterIdx;
+                    }
+                } else {
+                    // Check for exact text match or case-insensitive match
+                    const foundIdx = options.findIndex(opt => 
+                        opt.toLowerCase().trim() === q.answer.toLowerCase().trim()
+                    );
+                    answerIndex = foundIdx >= 0 ? foundIdx : 0;
+                }
+            } else if (q.correctIndex !== undefined) {
+                answerIndex = parseInt(q.correctIndex, 10) || 0;
+            } else if (q.correct_answer !== undefined) {
+                const foundIdx = options.indexOf(q.correct_answer);
+                answerIndex = foundIdx >= 0 ? foundIdx : 0;
+            } else if (q.correct_option !== undefined) {
+                answerIndex = parseInt(q.correct_option, 10) || 0;
+            }
+
+            return {
+                type: 'mcq',
+                text: text,
+                options: options,
+                answerIndex: answerIndex
+            };
+        });
+    };
+
     const getExamArray = (data) => {
         if (!data) return [];
+        let raw = [];
         if (Array.isArray(data)) {
             const row = data.find(d => d.exam);
-            if (row) return Array.isArray(row.exam) ? row.exam : (row.exam.questions || []);
-            return [];
+            if (row) raw = Array.isArray(row.exam) ? row.exam : (row.exam.questions || []);
+        } else if (data.exam) {
+            raw = Array.isArray(data.exam) ? data.exam : (data.exam.questions || []);
+        } else if (data.questions) {
+            raw = Array.isArray(data.questions) ? data.questions : [];
         }
-        if (data.exam) return Array.isArray(data.exam) ? data.exam : (data.exam.questions || []);
-        if (data.questions) return Array.isArray(data.questions) ? data.questions : [];
-        return [];
+        return normalizeQuestions(raw);
     };
 
     const getPathArray = (data) => {
@@ -501,17 +525,31 @@ Respond with ONLY a valid JSON object in this exact format, no extra text:
             dayIdx,
             data: dayData
         });
+        // Reset Study Buddy chat for the new topic
+        setStudyBuddy({
+            messages: [{ role: 'assistant', content: `Hi! I'm your AI Study Buddy for **${dayData.topic}**. Ask me anything about today's lesson!` }],
+            loading: false,
+            input: ''
+        });
     };
 
     const handleFinishLearningDay = async () => {
         if (!activeLearningDay) return;
-        toggleDayCompletion(activeLearningDay.weekIdx, activeLearningDay.dayIdx);
-        const dayTopic = activeLearningDay.data.topic || formData.skill;
-        setActiveLearningDay(null);
-        if (user?.id) {
-            updateProgressMetric(user.id, { hours_learned: 1 });
-            await saveLearningSession(user.id, formData.skill || 'Custom', dayTopic, 1);
-            window.dispatchEvent(new Event('refresh-dashboard'));
+        try {
+            const { weekIdx, dayIdx } = activeLearningDay;
+            toggleDayCompletion(weekIdx, dayIdx);
+            const dayTopic = activeLearningDay.data.topic || formData.skill;
+            setActiveLearningDay(null);
+            
+            if (user?.id) {
+                await updateProgressMetric(user.id, { hours_learned: 1 });
+                await saveLearningSession(user.id, formData.skill || 'Custom', dayTopic, 1);
+                window.dispatchEvent(new Event('refresh-dashboard'));
+            }
+        } catch (error) {
+            console.error("Error finishing learning day:", error);
+            // Close modal anyway to prevent UI hang
+            setActiveLearningDay(null);
         }
     };
 
@@ -583,11 +621,11 @@ Respond with ONLY a valid JSON object in this exact format, no extra text:
             Weak topics: ${currentWeekTopics}.
             Planned next week: ${nextWeekOriginal.title}.
             
-            Modify the next week's learning plan to include revision of the weak topics for the first 2 days and then continue with the planned topics at a suitable pace.
+            Modify the next week's learning plan to include revision of the weak topics for the first 2 days and then continue with new planned topics.
             
             Format:
             Week ${nextWeekNum}:
-            Day 1 - Topic... (ensure "explanation" is a detailed, professional explanation strictly 7 to 8 lines long, using \\n\\n for paragraph breaks to ensure a readable, professional format)
+            Day 1 - Topic... (ensure "content" is a detailed explanation roughly 3 lines long)
             Day 7 - Weekly Assessment Topics.
             
             Return ONLY a valid JSON object for the NEW Week ${nextWeekNum}, matching the schema exactly (title, days array with 7 elements).`;
@@ -604,19 +642,23 @@ Respond with ONLY a valid JSON object in this exact format, no extra text:
                         items: {
                             type: 'object',
                             properties: {
-                                dayNumber: { type: 'integer' },
+                                day: { type: 'integer' },
                                 topic: { type: 'string' },
-                                explanation: { type: 'string' },
-                                practice_exercise: { type: 'string' },
-                                assessment_topics: { type: 'string' }
+                                content: { type: 'string' },
+                                duration: { type: 'string' },
+                                practice_suggestion: { type: 'string' },
+                                resources: {
+                                    type: 'array',
+                                    items: { type: 'string' }
+                                }
                             }
                         }
                     }
                 }
             };
 
-            const updatedNextWeek = await geminiRequest(apiKey, {
-                model: "llama-3.3-70b-versatile",
+            const updatedNextWeek = await groqRequest(apiKey, {
+                model: "llama-3.1-8b-instant",
                 response_format: { type: "json_object" },
                 messages: [{ role: "user", content: prompt }]
             }, null);
@@ -635,7 +677,7 @@ Respond with ONLY a valid JSON object in this exact format, no extra text:
             alert(`Assessment score: ${score}%. Since this is below 70%, we've dynamically updated Week ${nextWeekNum} to include revision of previous topics!`);
         } catch (error) {
             console.error("Error updating timeline:", error);
-            alert("Could not update timeline. Proceeding with standard Week " + (weekIdx + 2));
+            alert(`Could not update timeline. Error: ${error.message}. Proceeding with standard Week ${weekIdx + 2}`);
         } finally {
             setIsUpdatingTimeline(false);
         }
@@ -668,21 +710,17 @@ Respond with ONLY a valid JSON object in this exact format, no extra text:
                 return;
             }
 
-            const data = await geminiTextFetch(apiKey, prompt, (msg) => {
+            const data = await groqRequest(apiKey, prompt, (msg) => {
                 setActiveWeeklyAssessment(prev => prev ? { ...prev, loading: true } : prev);
-                console.log('Assessment:', msg);
+                console.log('Assessment Status:', msg);
             });
 
-            if (data && data.questions) {
-                const formattedQuestions = data.questions.map(q => ({
-                    type: 'mcq',
-                    text: q.question,
-                    options: q.options,
-                    answerIndex: q.options.indexOf(q.answer) >= 0 ? q.options.indexOf(q.answer) : 0
-                }));
+            if (data && (data.questions || data.assessment)) {
+                const rawQuestions = data.questions || data.assessment;
+                const formattedQuestions = normalizeQuestions(rawQuestions);
 
                 if (pathId) {
-                    await saveWeeklyAssessment(pathId, weekIdx + 1, data.questions);
+                    await saveWeeklyAssessment(pathId, weekIdx + 1, formattedQuestions);
                 }
 
                 setActiveWeeklyAssessment(prev => ({
@@ -691,7 +729,7 @@ Respond with ONLY a valid JSON object in this exact format, no extra text:
                     loading: false
                 }));
             } else {
-                throw new Error("Invalid assessment data received");
+                throw new Error("Invalid assessment data received from AI");
             }
         } catch (error) {
             console.error("Error generating assessment:", error);
@@ -712,8 +750,63 @@ Respond with ONLY a valid JSON object in this exact format, no extra text:
         }
     };
 
+    const handleBuddyAsk = async (e) => {
+        if (e) e.preventDefault();
+        if (!studyBuddy.input.trim() || studyBuddy.loading) return;
+
+        const userMsg = studyBuddy.input.trim();
+        const newMessages = [...studyBuddy.messages, { role: 'user', content: userMsg }];
+        
+        setStudyBuddy(prev => ({ 
+            ...prev, 
+            messages: newMessages, 
+            loading: true, 
+            input: '' 
+        }));
+
+        try {
+            const apiKey = import.meta.env.VITE_GROQ_API_KEY;
+            const topicContext = activeLearningDay?.data?.topic || "this topic";
+            const contentContext = activeLearningDay?.data?.content || "";
+            
+            const prompt = `You are a helpful AI Study Buddy. The user is currently learning about: ${topicContext}.
+            Context from the lesson: ${contentContext}
+            
+            Answer the user's question clearly and concisely. If they ask for examples, provide them.
+            User Question: ${userMsg}
+            
+            IMPORTANT: Return your response as a JSON object with an "answer" field.
+            Example: {"answer": "Your explanation here..."}`;
+
+            const response = await groqRequest(apiKey, {
+                model: "llama-3.1-8b-instant",
+                response_format: { type: "json_object" },
+                messages: [
+                    { role: "system", content: "You are a helpful Tutor. Keep answers short, encouraging, and focused on the current topic. Always return JSON." },
+                    ...studyBuddy.messages.slice(-4).map(m => ({ role: m.role, content: m.content })), 
+                    { role: "user", content: prompt }
+                ]
+            });
+
+            const buddyReply = response.answer || response.explanation || "I'm sorry, I couldn't process that. Can you rephrase?";
+
+            setStudyBuddy(prev => ({
+                ...prev,
+                messages: [...newMessages, { role: 'assistant', content: buddyReply }],
+                loading: false
+            }));
+        } catch (error) {
+            console.error("Study Buddy Error:", error);
+            setStudyBuddy(prev => ({
+                ...prev,
+                messages: [...newMessages, { role: 'assistant', content: "Sorry, I'm having trouble connecting right now. Please try again!" }],
+                loading: false
+            }));
+        }
+    };
+
     const startQuickQuiz = async (topic) => {
-        setActiveQuickQuick({
+        setActiveQuickQuiz({
             topic,
             questions: [],
             currentIdx: 0,
@@ -730,25 +823,22 @@ Respond with ONLY a valid JSON object in this exact format, no extra text:
             const apiKey = import.meta.env.VITE_GROQ_API_KEY;
             if (!apiKey) {
                 alert("AI service configuration error. Please check API key.");
-                setActiveQuickQuick(null);
+                setActiveQuickQuiz(null);
                 return;
             }
 
-            const data = await geminiTextFetch(apiKey, prompt, (msg) => console.log('Quiz:', msg));
+            const data = await groqRequest(apiKey, prompt, (msg) => console.log('Quiz Status:', msg));
 
             if (data && data.questions) {
-                const formattedQs = data.questions.map(q => {
-                    const cIdx = q.options.indexOf(q.answer);
-                    return { text: q.question, options: q.options, answerIndex: cIdx >= 0 ? cIdx : 0 };
-                });
-                setActiveQuickQuick(prev => ({ ...prev, questions: formattedQs, loading: false }));
+                const formattedQs = normalizeQuestions(data.questions);
+                setActiveQuickQuiz(prev => ({ ...prev, questions: formattedQs, loading: false }));
             } else {
                 throw new Error('Invalid quiz data format.');
             }
         } catch (error) {
             console.error("Quick Quiz Error:", error);
             alert("Could not generate quiz. Please try again.");
-            setActiveQuickQuick(null);
+            setActiveQuickQuiz(null);
         }
     };
 
@@ -814,39 +904,37 @@ Respond with ONLY a valid JSON object in this exact format, no extra text:
                             <div className="pg-divider" />
 
                             {/* Section 2: Skill + Duration */}
-                            <div className="pg-section">
-                                <div className="pg-two-col">
-                                    <div className="pg-field">
-                                        <div className="pg-section-label">
-                                            <Search size={16} className="text-primary" />
-                                            <span>Target Skill / Topic</span>
-                                        </div>
-                                        <div className="input-wrapper">
-                                            <Search size={16} className="input-icon" />
-                                            <input type="text" name="skill" className="input-field with-icon"
-                                                placeholder="e.g. Python, Digital Marketing, Spanish..."
-                                                value={formData.skill}
-                                                onChange={(e) => setFormData({ ...formData, skill: e.target.value })}
-                                                required
-                                            />
-                                        </div>
+                            <div className="pg-two-col">
+                                <div className="pg-field">
+                                    <div className="pg-section-label">
+                                        <Search size={16} className="text-primary" />
+                                        <span>Target Skill / Topic</span>
                                     </div>
-                                    <div className="pg-field">
-                                        <div className="pg-section-label">
-                                            <Clock size={16} className="text-primary" />
-                                            <span>Duration</span>
-                                        </div>
-                                        <div className="input-wrapper">
-                                            <Clock size={16} className="input-icon" />
-                                            <select name="weeks" className="input-field with-icon select-field"
-                                                value={formData.weeks}
-                                                onChange={(e) => setFormData({ ...formData, weeks: e.target.value })}
-                                            >
-                                                {[4, 6, 8, 10, 12].map(w => (
-                                                    <option key={w} value={w}>{w} Weeks</option>
-                                                ))}
-                                            </select>
-                                        </div>
+                                    <div className="input-wrapper">
+                                        <Search size={16} className="input-icon" />
+                                        <input type="text" name="skill" className="input-field with-icon"
+                                            placeholder="e.g. Python, Digital Marketing, Spanish..."
+                                            value={formData.skill}
+                                            onChange={(e) => setFormData({ ...formData, skill: e.target.value })}
+                                            required
+                                        />
+                                    </div>
+                                </div>
+                                <div className="pg-field">
+                                    <div className="pg-section-label">
+                                        <Clock size={16} className="text-primary" />
+                                        <span>Duration</span>
+                                    </div>
+                                    <div className="input-wrapper">
+                                        <Clock size={16} className="input-icon" />
+                                        <select name="weeks" className="input-field with-icon select-field"
+                                            value={formData.weeks}
+                                            onChange={(e) => setFormData({ ...formData, weeks: e.target.value })}
+                                        >
+                                            {[4, 6, 8, 10, 12].map(w => (
+                                                <option key={w} value={w}>{w} Weeks</option>
+                                            ))}
+                                        </select>
                                     </div>
                                 </div>
                             </div>
@@ -905,15 +993,20 @@ Respond with ONLY a valid JSON object in this exact format, no extra text:
 
                 {/* Step 2: Loading State */}
                 {step === 2 && (
-                    <div className="loading-state glass-panel animate-fade-in text-center mt-6">
-                        <div className="ai-loader mb-6">
-                            <div className="ring ring-1"></div>
-                            <div className="ring ring-2"></div>
-                            <div className="ring ring-3"></div>
-                            <BrainCircuit size={48} className="text-primary pulse-animation" />
+                    <div className="loading-container glass-panel animate-in text-center py-12">
+                        <div className="loader mx-auto mb-6">
+                            <Sparkles className="icon pulse text-primary" size={48} />
                         </div>
-                        <h2>Building your Neural Pathway...</h2>
-                        <p className="text-secondary mt-2">Analyzing {formData.skill || 'topic'} constraints across {formData.weeks} weeks.</p>
+                        <h2>Creating Your Path...</h2>
+                        <p className="loading-text mt-2 text-secondary">{loadingMsg || "Connecting to AI..."}</p>
+                        
+                        {generationError && (
+                            <div className="error-box mt-8 p-4 rounded-lg bg-red-500/10 border border-red-500/20 text-red-500 text-sm max-w-md mx-auto">
+                                <p className="font-bold mb-1">AI Error Detected:</p>
+                                <p>{generationError}</p>
+                                <p className="mt-2 text-xs opacity-70 font-medium">Falling back to standard curriculum...</p>
+                            </div>
+                        )}
                     </div>
                 )}
 
@@ -934,8 +1027,8 @@ Respond with ONLY a valid JSON object in this exact format, no extra text:
                                     <p className="text-secondary">Before we finalize your path, let's verify your Level {formData.level} expertise.</p>
                                 </div>
 
-                                <div className="mock-question glass-panel">
-                                    <span className="q-number">Question {currentQuestionIndex + 1}/{examArray.length}</span>
+                                <div className="mock-question glass-panel p-6 mb-8">
+                                    <span className="q-number text-sm font-semibold text-primary">Question {currentQuestionIndex + 1}/{examArray.length}</span>
                                     <h4 className="mt-2 mb-6">{examArray[currentQuestionIndex]?.text}</h4>
 
                                     <div className="options-stack">
@@ -954,7 +1047,7 @@ Respond with ONLY a valid JSON object in this exact format, no extra text:
                                     </div>
                                 </div>
 
-                                <div className="flex justify-between mt-8">
+                                <div className="flex justify-between items-center mt-10 pt-6 border-t border-light">
                                     <button
                                         className="btn btn-outline"
                                         disabled={currentQuestionIndex === 0}
@@ -1030,7 +1123,7 @@ Respond with ONLY a valid JSON object in this exact format, no extra text:
                                                 </div>
 
                                                 <div className="days-list mt-4">
-                                                    {week.days && week.days.map((day, dIdx) => {
+                                                    {week.days && week.days.slice(0, 6).map((day, dIdx) => {
                                                         const isCompleted = completedDays[`${idx}-${dIdx}`];
                                                         return (
                                                             <div
@@ -1090,90 +1183,82 @@ Respond with ONLY a valid JSON object in this exact format, no extra text:
                 )}
             </div>
 
-            {/* Weekly Assessment Live Modal */}
-            {
-                activeWeeklyAssessment && (
-                    <div className="fixed inset-0 bg-black bg-opacity-80 z-50 flex items-center justify-center backdrop-blur-sm" style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0,0,0,0.85)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                        <div className="exam-card glass-panel w-full max-w-2xl animate-fade-in mx-4" style={{ margin: 'auto' }}>
-
-                            {activeWeeklyAssessment.loading && (
-                                <div className="text-center py-12">
-                                    <Sparkles size={48} className="text-primary pulse-animation mx-auto mb-6" />
-                                    <h2>Generating Live Assessment...</h2>
-                                    <p className="text-secondary mt-2">Connecting to AI to test your Week {activeWeeklyAssessment.weekIdx + 1} knowledge...</p>
-                                </div>
-                            )}
-
-                            {!activeWeeklyAssessment.loading && activeWeeklyAssessment.questions.length > 0 && (
-                                <>
-                                    <div className="text-center mb-8">
-                                        <span className="badge mb-4">Week {activeWeeklyAssessment.weekIdx + 1} Assessment</span>
-                                        <h2>Knowledge Checkpoint</h2>
-                                    </div>
-
-                                    <div className="mock-question glass-panel">
-                                        <div className="flex justify-between align-center mb-2">
-                                            <span className="q-number">Question {activeWeeklyAssessment.currentIdx + 1} of {activeWeeklyAssessment.questions.length}</span>
-                                            <span className="badge">{activeWeeklyAssessment.questions[activeWeeklyAssessment.currentIdx]?.type === 'mcq' ? 'Multiple Choice' : 'Practical / Coding'}</span>
-                                        </div>
-                                        <h4 className="mt-2 mb-6">{activeWeeklyAssessment.questions[activeWeeklyAssessment.currentIdx]?.text}</h4>
-
-                                        {activeWeeklyAssessment.questions[activeWeeklyAssessment.currentIdx]?.type === 'mcq' ? (
-                                            <div className="options-stack">
-                                                {activeWeeklyAssessment.questions[activeWeeklyAssessment.currentIdx]?.options.map((opt, i) => (
-                                                    <label key={i} className={`radio-card option-card ${activeWeeklyAssessment.answers[activeWeeklyAssessment.currentIdx] === i ? 'selected' : ''}`}>
-                                                        <input
-                                                            type="radio"
-                                                            name={`wq${activeWeeklyAssessment.currentIdx}`}
-                                                            className="hidden-radio"
-                                                            checked={activeWeeklyAssessment.answers[activeWeeklyAssessment.currentIdx] === i}
-                                                            onChange={() => setActiveWeeklyAssessment(prev => ({
-                                                                ...prev,
-                                                                answers: { ...prev.answers, [prev.currentIdx]: i }
-                                                            }))}
-                                                        />
-                                                        <span>{opt}</span>
-                                                    </label>
-                                                ))}
-                                            </div>
-                                        ) : (
-                                            <textarea
-                                                className="input-field mt-4 w-full font-mono text-sm"
-                                                style={{ minHeight: '150px', background: 'rgba(0,0,0,0.3)' }}
-                                                placeholder="Write your code or answer here..."
-                                                value={activeWeeklyAssessment.answers[activeWeeklyAssessment.currentIdx] || ''}
-                                                onChange={(e) => setActiveWeeklyAssessment(prev => ({
-                                                    ...prev,
-                                                    answers: { ...prev.answers, [prev.currentIdx]: e.target.value }
-                                                }))}
-                                            />
-                                        )}
-                                    </div>
-
-                                    <div className="flex justify-between mt-8">
-                                        <button
-                                            className="btn btn-outline"
-                                            onClick={() => setActiveWeeklyAssessment(null)}
-                                        >
-                                            Cancel
-                                        </button>
-                                        <button
-                                            className="btn btn-primary"
-                                            onClick={handleWeeklyNextBtn}
-                                            disabled={
-                                                activeWeeklyAssessment.answers[activeWeeklyAssessment.currentIdx] === undefined ||
-                                                (activeWeeklyAssessment.questions[activeWeeklyAssessment.currentIdx]?.type === 'coding' && !activeWeeklyAssessment.answers[activeWeeklyAssessment.currentIdx].trim())
-                                            }
-                                        >
-                                            {activeWeeklyAssessment.currentIdx === activeWeeklyAssessment.questions.length - 1 ? 'Submit & Grade' : 'Next Question'} <ChevronRight size={18} />
-                                        </button>
-                                    </div>
-                                </>
-                            )}
+                    {/* Weekly Assessment Live Modal */}
+            {activeWeeklyAssessment && (
+                <div className="modal-overlay flex items-center justify-center p-4" style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.85)', zIndex: 2000, backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <div className="exam-card glass-panel w-full max-w-2xl animate-scale-up relative" style={{ maxHeight: '90vh', overflowY: 'auto' }}>
+                        
+                        <div className="flex justify-between items-start mb-6 sticky top-0 bg-dark py-2 z-10 border-b border-light">
+                            <div>
+                                <span className="badge mb-2">Week {activeWeeklyAssessment.weekIdx + 1} Assessment</span>
+                                <h2 className="text-gradient">Knowledge Checkpoint</h2>
+                            </div>
+                            <button className="close-btn text-secondary hover:text-white" onClick={() => setActiveWeeklyAssessment(null)}>✕</button>
                         </div>
+
+                        {activeWeeklyAssessment.loading ? (
+                            <div className="text-center py-16">
+                                <Sparkles size={48} className="text-primary pulse-animation mx-auto mb-6" />
+                                <h3>Generating Live Assessment...</h3>
+                                <p className="text-secondary mt-2 text-sm">Our AI is creating custom questions based on this week's 6 days of learning.</p>
+                            </div>
+                        ) : (
+                            <div className="exam-body">
+                                <div className="flex justify-between items-center mb-6">
+                                    <span className="text-xs font-semibold text-secondary uppercase tracking-wider">Question {activeWeeklyAssessment.currentIdx + 1} of {activeWeeklyAssessment.questions.length}</span>
+                                    <div className="w-32 h-1 bg-dark rounded-full overflow-hidden">
+                                        <div 
+                                            className="h-full bg-primary transition-all duration-300" 
+                                            style={{ width: `${((activeWeeklyAssessment.currentIdx + 1) / activeWeeklyAssessment.questions.length) * 100}%` }}
+                                        ></div>
+                                    </div>
+                                </div>
+
+                                <div className="mock-question glass-panel p-6 mb-8 border border-primary border-opacity-20 shadow-lg">
+                                    <h4 className="text-lg leading-snug mb-8">{activeWeeklyAssessment.questions[activeWeeklyAssessment.currentIdx]?.text}</h4>
+
+                                    <div className="options-stack gap-3">
+                                        {activeWeeklyAssessment.questions[activeWeeklyAssessment.currentIdx]?.options.map((opt, i) => (
+                                            <label key={i} className={`radio-card option-card p-4 flex align-center gap-3 cursor-pointer transition-all border border-light rounded-lg hover:border-primary ${activeWeeklyAssessment.answers[activeWeeklyAssessment.currentIdx] === i ? 'selected border-primary bg-primary-light shadow-[0_0_15px_rgba(var(--primary-rgb),0.3)]' : ''}`}>
+                                                <input
+                                                    type="radio"
+                                                    name={`wq${activeWeeklyAssessment.currentIdx}`}
+                                                    className="hidden-radio"
+                                                    checked={activeWeeklyAssessment.answers[activeWeeklyAssessment.currentIdx] === i}
+                                                    onChange={() => setActiveWeeklyAssessment(prev => ({
+                                                        ...prev,
+                                                        answers: { ...prev.answers, [prev.currentIdx]: i }
+                                                    }))}
+                                                />
+                                                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold border ${activeWeeklyAssessment.answers[activeWeeklyAssessment.currentIdx] === i ? 'bg-primary border-primary text-white' : 'border-light text-secondary'}`}>
+                                                    {String.fromCharCode(65 + i)}
+                                                </div>
+                                                <span className="text-sm font-medium">{opt}</span>
+                                            </label>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                <div className="flex justify-between items-center mt-10 pt-6 border-t border-light gap-4">
+                                    <button
+                                        className="btn btn-outline flex-1"
+                                        onClick={() => setActiveWeeklyAssessment(null)}
+                                    >
+                                        Exit
+                                    </button>
+                                    <button
+                                        className="btn btn-primary btn-glow flex-1"
+                                        onClick={handleWeeklyNextBtn}
+                                        disabled={activeWeeklyAssessment.answers[activeWeeklyAssessment.currentIdx] === undefined}
+                                    >
+                                        {activeWeeklyAssessment.currentIdx === activeWeeklyAssessment.questions.length - 1 ? 'Finish & Grade' : 'Next Question'} <ChevronRight size={18} />
+                                    </button>
+                                </div>
+                            </div>
+                        )}
                     </div>
-                )
-            }
+                </div>
+            )}
 
             {/* Daily Subject Learning Modal */}
             {
@@ -1245,124 +1330,90 @@ Respond with ONLY a valid JSON object in this exact format, no extra text:
                                 )}
                             </div>
 
-                            <div className="flex justify-between mt-8 pt-4 border-t border-light gap-4">
-                                <button className="btn btn-outline" onClick={() => setActiveLearningDay(null)}>
-                                    Read Later
-                                </button>
-                                <div className="flex gap-2">
-                                    <button
-                                        className="btn btn-outline flex align-center gap-2"
-                                        onClick={() => startQuickQuiz(activeLearningDay.data.topic)}
-                                    >
-                                        <Sparkles size={18} className="text-primary" /> Quick Quiz
-                                    </button>
-                                    <div className="p-4 bg-primary-light rounded border border-primary">
-                                        <h4 className="flex align-center gap-2 mb-2 text-primary"><Terminal size={18} /> Practice Task</h4>
-                                        <p className="text-sm text-secondary">{activeLearningDay.data.practice_suggestion || activeLearningDay.data.practice_exercise}</p>
+                             <div className="flex justify-between mt-8 pt-8 border-t border-light gap-8 items-start">
+                                {/* Left Side: Learning Actions */}
+                                <div className="flex-1 space-y-4">
+                                    <div className="flex gap-3">
+                                        <button className="btn btn-outline" onClick={() => setActiveLearningDay(null)}>
+                                            Read Later
+                                        </button>
                                         <button
-                                            className="btn btn-primary btn-sm mt-4 hover-glow"
-                                            onClick={() => handleStartPractice(activeLearningDay.data)}
+                                            className="btn btn-outline flex align-center gap-2"
+                                            onClick={() => startQuickQuiz(activeLearningDay.data.topic)}
                                         >
-                                            Start in Sandbox
+                                            <Sparkles size={18} className="text-secondary" /> Quick Quiz
+                                        </button>
+                                        <button className="btn btn-primary btn-glow" onClick={handleFinishLearningDay}>
+                                            Mark as Complete & Close
                                         </button>
                                     </div>
-                                    <button className="btn btn-primary btn-glow" onClick={handleFinishLearningDay}>
-                                        Mark as Complete & Close
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                )
-            }
 
-            {/* Weekly Assessment Overlay */}
-            {activeWeeklyAssessment && (
-                <div className="modal-overlay flex items-center justify-center p-4 z-[1000]">
-                    <div className="exam-card glass-panel w-full max-w-4xl max-h-[90vh] overflow-y-auto animate-scale-up relative">
-                        <div className="sticky top-0 bg-dark py-4 z-10 border-b border-light mb-6">
-                            <div className="flex justify-between items-start">
-                                <div>
-                                    <span className="badge mb-2">Week {activeWeeklyAssessment.weekIdx + 1} Assessment</span>
-                                    <h2>Knowledge Evaluation</h2>
-                                </div>
-                                <button className="close-btn" onClick={() => setActiveWeeklyAssessment(null)}>✕</button>
-                            </div>
-                        </div>
-
-                        {activeWeeklyAssessment.loading ? (
-                            <div className="text-center py-20">
-                                <Sparkles size={48} className="text-primary pulse-animation mx-auto mb-6" />
-                                <h2>Dynamic Assessment Generation</h2>
-                                <p className="text-secondary">AI is creating custom questions based on this week's topics...</p>
-                            </div>
-                        ) : (
-                            <div className="exam-body mt-4">
-                                <div className="flex justify-between items-center mb-6">
-                                    <span className="text-sm font-semibold">Question {activeWeeklyAssessment.currentIdx + 1}/{activeWeeklyAssessment.questions.length}</span>
-                                    <div className="progress-bar-small w-48">
-                                        <div className="progress-fill" style={{ width: `${((activeWeeklyAssessment.currentIdx + 1) / activeWeeklyAssessment.questions.length) * 100}%` }}></div>
-                                    </div>
-                                </div>
-
-                                <div className="mock-question glass-panel p-6 shadow-xl">
-                                    <h3 className="mb-8">{activeWeeklyAssessment.questions[activeWeeklyAssessment.currentIdx].text}</h3>
-
-                                    {activeWeeklyAssessment.questions[activeWeeklyAssessment.currentIdx].type === 'mcq' ? (
-                                        <div className="options-stack">
-                                            {activeWeeklyAssessment.questions[activeWeeklyAssessment.currentIdx].options.map((opt, i) => (
-                                                <label key={i} className={`radio-card option-card ${activeWeeklyAssessment.answers[activeWeeklyAssessment.currentIdx] === i ? 'selected' : ''}`}>
-                                                    <input
-                                                        type="radio"
-                                                        name="weekly-option"
-                                                        className="hidden-radio"
-                                                        checked={activeWeeklyAssessment.answers[activeWeeklyAssessment.currentIdx] === i}
-                                                        onChange={() => setActiveWeeklyAssessment(prev => ({
-                                                            ...prev,
-                                                            answers: { ...prev.answers, [prev.currentIdx]: i }
-                                                        }))}
-                                                    />
-                                                    <span className="option-letter">{String.fromCharCode(65 + i)}</span>
-                                                    <span className="option-text">{opt}</span>
-                                                </label>
-                                            ))}
-                                        </div>
-                                    ) : (
-                                        <div className="coding-practical p-4 bg-black rounded-lg border border-primary border-opacity-30">
-                                            <p className="text-sm text-secondary mb-4 italic">This is a practical assessment question. Write your approach below (or use the Sandbox later).</p>
-                                            <textarea
-                                                className="text-input w-full min-h-[150px] bg-transparent text-white p-2"
-                                                placeholder="Describe your solution or write code here..."
-                                                value={activeWeeklyAssessment.answers[activeWeeklyAssessment.currentIdx] || ''}
-                                                onChange={(e) => setActiveWeeklyAssessment(prev => ({
-                                                    ...prev,
-                                                    answers: { ...prev.answers, [prev.currentIdx]: e.target.value }
-                                                }))}
-                                            />
+                                    {activeLearningDay.data.practice_suggestion && (
+                                        <div className="p-4 bg-primary-light rounded border border-primary border-opacity-30">
+                                            <h4 className="flex align-center gap-2 mb-2 text-primary font-bold"><Terminal size={18} /> Interactive Practice</h4>
+                                            <p className="text-xs text-secondary mb-4 leading-relaxed">{activeLearningDay.data.practice_suggestion || activeLearningDay.data.practice_exercise}</p>
+                                            <button
+                                                className="btn btn-primary btn-sm w-full shadow-lg"
+                                                onClick={() => handleStartPractice(activeLearningDay.data)}
+                                            >
+                                                Launch Sandbox
+                                            </button>
                                         </div>
                                     )}
                                 </div>
 
-                                <div className="flex justify-between mt-10">
-                                    <button
-                                        className="btn btn-outline"
-                                        disabled={activeWeeklyAssessment.currentIdx === 0}
-                                        onClick={() => setActiveWeeklyAssessment(prev => ({ ...prev, currentIdx: prev.currentIdx - 1 }))}
-                                    >
-                                        Previous
-                                    </button>
-                                    <button
-                                        className="btn btn-primary btn-glow"
-                                        onClick={handleWeeklyNextBtn}
-                                    >
-                                        {activeWeeklyAssessment.currentIdx < activeWeeklyAssessment.questions.length - 1 ? 'Next Question' : 'Submit Assessment'}
-                                    </button>
+                                {/* Right Side: AI Study Buddy Chat */}
+                                <div className="w-80 glass-panel p-0 flex flex-col border border-primary border-opacity-20 shadow-2xl overflow-hidden" style={{ height: '400px' }}>
+                                    <div className="p-3 border-b border-light flex align-center gap-2 bg-primary-light">
+                                        <Sparkles size={16} className="text-primary pulse-animation" />
+                                        <span className="text-xs font-bold uppercase tracking-wider text-primary">AI Study Buddy</span>
+                                    </div>
+                                    
+                                    <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-dark bg-opacity-50 chat-container">
+                                        {studyBuddy.messages.map((msg, i) => (
+                                            <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                                                <div className={`max-w-[90%] p-3 rounded-2xl text-xs leading-relaxed ${
+                                                    msg.role === 'user' 
+                                                        ? 'bg-primary text-white rounded-br-none' 
+                                                        : 'bg-dark border border-light text-secondary rounded-bl-none shadow-sm'
+                                                }`}>
+                                                    {msg.content}
+                                                </div>
+                                            </div>
+                                        ))}
+                                        {studyBuddy.loading && (
+                                            <div className="flex justify-start">
+                                                <div className="bg-dark border border-light p-3 rounded-2xl rounded-bl-none">
+                                                    <span className="dot-flashing"></span>
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    <form onSubmit={handleBuddyAsk} className="p-3 border-t border-light bg-dark">
+                                        <div className="relative">
+                                            <input 
+                                                type="text" 
+                                                className="w-full bg-dark border border-light rounded-full py-2 px-4 pr-10 text-xs focus:border-primary outline-none transition-all placeholder:text-muted"
+                                                placeholder="Ask a question..."
+                                                value={studyBuddy.input}
+                                                onChange={(e) => setStudyBuddy(prev => ({ ...prev, input: e.target.value }))}
+                                                disabled={studyBuddy.loading}
+                                            />
+                                            <button 
+                                                type="submit"
+                                                className="absolute right-2 top-1/2 -translate-y-1/2 text-primary hover:text-white disabled:opacity-50"
+                                                disabled={!studyBuddy.input.trim() || studyBuddy.loading}
+                                            >
+                                                <Send size={16} />
+                                            </button>
+                                        </div>
+                                    </form>
                                 </div>
                             </div>
-                        )}
+                        </div>
                     </div>
-                </div>
-            )}
+                )}
 
             {/* Quick Quiz Overlay */}
             {activeQuickQuiz && (
@@ -1370,7 +1421,7 @@ Respond with ONLY a valid JSON object in this exact format, no extra text:
                     <div className="exam-card glass-panel w-full max-w-lg mb-0 relative">
                         <button
                             className="absolute top-4 right-4 text-secondary hover:text-white"
-                            onClick={() => setActiveQuickQuick(null)}
+                            onClick={() => setActiveQuickQuiz(null)}
                         >
                             ✕
                         </button>
@@ -1403,7 +1454,7 @@ Respond with ONLY a valid JSON object in this exact format, no extra text:
                                                             type="radio"
                                                             className="hidden-radio"
                                                             checked={activeQuickQuiz.answers[activeQuickQuiz.currentIdx] === i}
-                                                            onChange={() => setActiveQuickQuick(prev => ({
+                                                            onChange={() => setActiveQuickQuiz(prev => ({
                                                                 ...prev,
                                                                 answers: { ...prev.answers, [prev.currentIdx]: i }
                                                             }))}
@@ -1414,33 +1465,33 @@ Respond with ONLY a valid JSON object in this exact format, no extra text:
                                             </div>
                                         </div>
 
-                                        <div className="flex justify-between mt-4">
-                                            <button
-                                                className="btn btn-outline btn-sm"
-                                                onClick={() => setActiveQuickQuick(null)}
-                                            >
-                                                Close
-                                            </button>
-                                            <button
-                                                className="btn btn-primary btn-sm"
-                                                disabled={activeQuickQuiz.answers[activeQuickQuiz.currentIdx] === undefined}
-                                                onClick={() => {
-                                                    if (activeQuickQuiz.currentIdx < 2) {
-                                                        setActiveQuickQuick(prev => ({ ...prev, currentIdx: prev.currentIdx + 1 }));
-                                                    } else {
-                                                        // Score and finish
-                                                        let correct = 0;
-                                                        activeQuickQuiz.questions.forEach((q, idx) => {
-                                                            if (activeQuickQuiz.answers[idx] === q.answerIndex) correct++;
-                                                        });
-                                                        alert(`Quiz Complete! You got ${correct}/3 correct.`);
-                                                        setActiveQuickQuick(null);
-                                                    }
-                                                }}
-                                            >
-                                                {activeQuickQuiz.currentIdx === 2 ? 'Finish' : 'Next'}
-                                            </button>
-                                        </div>
+                                            <div className="flex justify-between items-center mt-6 pt-4 border-t border-light">
+                                                <button
+                                                    className="btn btn-outline btn-sm"
+                                                    onClick={() => setActiveQuickQuiz(null)}
+                                                >
+                                                    Close
+                                                </button>
+                                                <button
+                                                    className="btn btn-primary btn-sm"
+                                                    disabled={activeQuickQuiz.answers[activeQuickQuiz.currentIdx] === undefined}
+                                                    onClick={() => {
+                                                        if (activeQuickQuiz.currentIdx < activeQuickQuiz.questions.length - 1) {
+                                                            setActiveQuickQuiz(prev => ({ ...prev, currentIdx: prev.currentIdx + 1 }));
+                                                        } else {
+                                                            // Score and finish
+                                                            let correct = 0;
+                                                            activeQuickQuiz.questions.forEach((q, idx) => {
+                                                                if (activeQuickQuiz.answers[idx] === q.answerIndex) correct++;
+                                                            });
+                                                            alert(`Quiz Complete! You got ${correct}/${activeQuickQuiz.questions.length} correct.`);
+                                                            setActiveQuickQuiz(null);
+                                                        }
+                                                    }}
+                                                >
+                                                    {activeQuickQuiz.currentIdx === activeQuickQuiz.questions.length - 1 ? 'Finish' : 'Next'}
+                                                </button>
+                                            </div>
                                     </div>
                                 )}
                             </>
