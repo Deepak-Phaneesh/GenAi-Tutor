@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../lib/AuthContext';
 import { updateProgressMetric } from '../lib/progress';
@@ -235,6 +235,22 @@ export default function PathGenerator() {
     // { topic: string, questions: [], currentIdx: 0, answers: {}, loading: boolean }
     const [activeQuickQuiz, setActiveQuickQuick] = useState(null);
 
+    // Ref for the daily learning modal scroll container
+    const learningModalRef = useRef(null);
+
+    // Sync state to dashboard
+    useEffect(() => {
+        if (activeLearningDay && learningModalRef.current) {
+            learningModalRef.current.scrollTop = 0;
+        }
+    }, [activeLearningDay]);
+
+    // Reset scroll to top whenever the step/view changes
+    useEffect(() => {
+        const mainEl = document.querySelector('.main-content');
+        if (mainEl) mainEl.scrollTop = 0;
+    }, [step]);
+
     // Sync state to dashboard
     useEffect(() => {
         if (generatedData && step >= 4) {
@@ -332,7 +348,7 @@ Rules:
 2. Topics must progressively increase in difficulty.
 3. Do NOT repeat topics from any previous week.
 4. Each week must contain exactly 7 days (Day 1-6 are learning days, Day 7 is the assessment day).
-5. Each day must have: day number, topic title, content explanation (2+ sentences), duration (e.g. "2 hours"), and practice_suggestion.
+5. Each day must have: day number, topic title, content explanation (a detailed, professional explanation strictly 7 to 8 lines long, providing deep context so the user can study directly from it, use \\n\\n for paragraph breaks to ensure a readable, professional format), duration (e.g. "2 hours"), and practice_suggestion.
 6. Also include a 5-question pre-assessment exam with text, options array (4 choices), and answerIndex (0-3).
 
 IMPORTANT: The entire curriculum must be SPECIFICALLY about "${currentForm.skill}" in the context of "${domainLabel}". Do NOT generate a generic curriculum.${isNonProgramming ? `
@@ -571,7 +587,7 @@ Respond with ONLY a valid JSON object in this exact format, no extra text:
             
             Format:
             Week ${nextWeekNum}:
-            Day 1 - Topic...
+            Day 1 - Topic... (ensure "explanation" is a detailed, professional explanation strictly 7 to 8 lines long, using \\n\\n for paragraph breaks to ensure a readable, professional format)
             Day 7 - Weekly Assessment Topics.
             
             Return ONLY a valid JSON object for the NEW Week ${nextWeekNum}, matching the schema exactly (title, days array with 7 elements).`;
@@ -773,116 +789,116 @@ Respond with ONLY a valid JSON object in this exact format, no extra text:
 
                 {/* Step 1: Configuration Form */}
                 {step === 1 && (
-                    <div className="generator-grid mt-6">
-                        <form className="generator-form glass-panel animate-fade-in" onSubmit={handleGenerate}>
-                            <div className="form-section">
-                                <h3><MapPin className="text-primary" size={20} /> Domain & Skill</h3>
+                    <div className="pg-form-wrapper animate-fade-in">
+                        <form className="pg-form glass-panel" onSubmit={handleGenerate}>
 
-                                <div className="input-group">
-                                    <label className="input-label">Select Domain</label>
-                                    <div className="radio-grid">
-                                        {domains.map(d => (
-                                            <label key={d.id} className={`radio-card small ${formData.domain === d.id ? 'selected' : ''}`}>
-                                                <input
-                                                    type="radio"
-                                                    name="domain"
-                                                    value={d.id}
-                                                    className="hidden-radio"
-                                                    checked={formData.domain === d.id}
-                                                    onChange={(e) => setFormData({ ...formData, domain: e.target.value })}
-                                                />
-                                                <span>{d.label}</span>
-                                            </label>
-                                        ))}
-                                    </div>
+                            {/* Section 1: Domain */}
+                            <div className="pg-section">
+                                <div className="pg-section-label">
+                                    <MapPin size={16} className="text-primary" />
+                                    <span>Select Domain</span>
                                 </div>
-
-                                <div className="input-group mt-6">
-                                    <label className="input-label">Target Skill / Topic</label>
-                                    <div className="input-wrapper">
-                                        <Search size={18} className="input-icon" />
-                                        <input
-                                            type="text"
-                                            name="skill"
-                                            className="input-field with-icon"
-                                            placeholder="e.g. Python, Digital Marketing, Spanish..."
-                                            value={formData.skill}
-                                            onChange={(e) => setFormData({ ...formData, skill: e.target.value })}
-                                            required
-                                        />
-                                    </div>
+                                <div className="pg-domain-pills">
+                                    {domains.map(d => (
+                                        <label key={d.id} className={`pg-pill ${formData.domain === d.id ? 'active' : ''}`}>
+                                            <input type="radio" name="domain" value={d.id} className="hidden-radio"
+                                                checked={formData.domain === d.id}
+                                                onChange={(e) => setFormData({ ...formData, domain: e.target.value })}
+                                            />
+                                            <span>{d.label}</span>
+                                        </label>
+                                    ))}
                                 </div>
                             </div>
 
-                            <div className="form-section mt-8">
-                                <h3><GraduationCap className="text-secondary" size={20} /> Expertise & Timeline</h3>
+                            <div className="pg-divider" />
 
-                                <div className="input-group">
-                                    <label className="input-label">Current Level (1-5)</label>
-                                    <div className="range-wrapper">
-                                        <input
-                                            type="range"
-                                            min="1" max="5"
-                                            value={formData.level}
-                                            onChange={(e) => setFormData({ ...formData, level: e.target.value })}
-                                            className="range-slider"
-                                        />
-                                        <div className="range-labels mt-2">
-                                            <div className="flex flex-col items-center" style={{ width: '40px', marginLeft: '-10px' }}>
-                                                <span>1</span>
-                                                <span className="text-xs text-secondary mt-1">Beginner</span>
-                                            </div>
-                                            <div className="flex flex-col items-center" style={{ width: '40px' }}>
-                                                <span>2</span>
-                                            </div>
-                                            <div className="flex flex-col items-center" style={{ width: '40px' }}>
-                                                <span>3</span>
-                                            </div>
-                                            <div className="flex flex-col items-center" style={{ width: '40px' }}>
-                                                <span>4</span>
-                                            </div>
-                                            <div className="flex flex-col items-center" style={{ width: '40px', marginRight: '-10px' }}>
-                                                <span>5</span>
-                                                <span className="text-xs text-secondary mt-1">Expert</span>
-                                            </div>
+                            {/* Section 2: Skill + Duration */}
+                            <div className="pg-section">
+                                <div className="pg-two-col">
+                                    <div className="pg-field">
+                                        <div className="pg-section-label">
+                                            <Search size={16} className="text-primary" />
+                                            <span>Target Skill / Topic</span>
+                                        </div>
+                                        <div className="input-wrapper">
+                                            <Search size={16} className="input-icon" />
+                                            <input type="text" name="skill" className="input-field with-icon"
+                                                placeholder="e.g. Python, Digital Marketing, Spanish..."
+                                                value={formData.skill}
+                                                onChange={(e) => setFormData({ ...formData, skill: e.target.value })}
+                                                required
+                                            />
+                                        </div>
+                                    </div>
+                                    <div className="pg-field">
+                                        <div className="pg-section-label">
+                                            <Clock size={16} className="text-primary" />
+                                            <span>Duration</span>
+                                        </div>
+                                        <div className="input-wrapper">
+                                            <Clock size={16} className="input-icon" />
+                                            <select name="weeks" className="input-field with-icon select-field"
+                                                value={formData.weeks}
+                                                onChange={(e) => setFormData({ ...formData, weeks: e.target.value })}
+                                            >
+                                                {[4, 6, 8, 10, 12].map(w => (
+                                                    <option key={w} value={w}>{w} Weeks</option>
+                                                ))}
+                                            </select>
                                         </div>
                                     </div>
                                 </div>
+                            </div>
 
-                                <div className="input-group mt-6">
-                                    <label className="input-label">Duration (Weeks)</label>
-                                    <div className="input-wrapper">
-                                        <Clock size={18} className="input-icon" />
-                                        <select
-                                            className="input-field with-icon select-field"
-                                            value={formData.weeks}
-                                            onChange={(e) => setFormData({ ...formData, weeks: e.target.value })}
-                                        >
-                                            {[4, 6, 8, 10, 12].map(w => (
-                                                <option key={w} value={w}>{w} Weeks</option>
-                                            ))}
-                                        </select>
+                            <div className="pg-divider" />
+
+                            {/* Section 3: Level Slider */}
+                            <div className="pg-section">
+                                <div className="pg-section-label">
+                                    <GraduationCap size={16} className="text-primary" />
+                                    <span>Your Current Level</span>
+                                    <span className="pg-level-badge">Level {formData.level}</span>
+                                </div>
+                                <div className="range-wrapper" style={{ paddingBottom: 0 }}>
+                                    <input type="range" min="1" max="5" value={formData.level}
+                                        onChange={(e) => setFormData({ ...formData, level: e.target.value })}
+                                        className="range-slider"
+                                    />
+                                    <div className="pg-level-labels">
+                                        <span>Beginner</span>
+                                        <span>Intermediate</span>
+                                        <span>Expert</span>
                                     </div>
                                 </div>
                             </div>
 
-                            <button type="submit" className="btn btn-primary btn-lg w-full mt-8 btn-glow">
-                                <Sparkles size={20} /> Generate Intelligence Path
-                            </button>
+                            {/* CTA */}
+                            <div className="pg-cta">
+                                <button type="submit" className="btn btn-primary btn-lg w-full btn-glow">
+                                    <Sparkles size={20} /> Generate My Learning Path
+                                </button>
+                                <p className="text-xs text-secondary text-center mt-3" style={{ opacity: 0.6 }}>
+                                    AI generates a personalized weekly curriculum with daily tasks &amp; assessments.
+                                </p>
+                            </div>
                         </form>
 
-                        {/* Side Info */}
-                        <div className="generator-info animate-fade-in" style={{ animationDelay: '0.2s' }}>
-                            <div className="info-card glass-panel">
-                                <Wand2 size={32} className="text-secondary mb-4" />
-                                <h3 className="mb-2">How it works</h3>
-                                <ul className="info-list">
-                                    <li><CheckCircle2 size={16} className="text-success" /> Tell us what you want to learn.</li>
-                                    <li><CheckCircle2 size={16} className="text-success" /> Our AI Agent designs a custom curriculum.</li>
-                                    <li><CheckCircle2 size={16} className="text-success" /> Take a quick exam to gauge your exact skill level.</li>
-                                    <li><CheckCircle2 size={16} className="text-success" /> Follow your daily bite-sized tasks & weekly assessments.</li>
-                                </ul>
-                            </div>
+                        {/* Feature Cards */}
+                        <div className="pg-info-cards animate-fade-in" style={{ animationDelay: '0.15s' }}>
+                            {[
+                                { icon: <Wand2 size={22} className="text-primary" />, title: 'AI-Personalized', desc: 'Curriculum designed specifically for your skill level and goals.' },
+                                { icon: <CalendarDays size={22} className="text-secondary" />, title: 'Day-by-Day Plan', desc: 'Structured daily tasks and weekly checkpoint assessments.' },
+                                { icon: <GraduationCap size={22} className="text-success" />, title: 'Adaptive Learning', desc: 'Path updates automatically based on your weekly performance.' },
+                            ].map((card, i) => (
+                                <div key={i} className="pg-info-card glass-panel">
+                                    <div className="pg-info-icon">{card.icon}</div>
+                                    <div>
+                                        <p className="font-semibold" style={{ fontSize: '0.95rem' }}>{card.title}</p>
+                                        <p className="text-secondary" style={{ fontSize: '0.82rem', marginTop: '0.25rem', lineHeight: 1.5 }}>{card.desc}</p>
+                                    </div>
+                                </div>
+                            ))}
                         </div>
                     </div>
                 )}
@@ -1028,7 +1044,7 @@ Respond with ONLY a valid JSON object in this exact format, no extra text:
                                                                 <div className="day-content">
                                                                     <p className={`font-semibold ${isCompleted ? 'line-through text-secondary' : ''}`}>{day.topic}</p>
                                                                     <div className="flex justify-between align-center mt-1">
-                                                                        <span className="text-xs text-secondary truncate" style={{ maxWidth: '200px' }}>{day.content || day.explanation}</span>
+                                                                        <span className="text-xs text-secondary truncate" style={{ maxWidth: '200px', display: '-webkit-box', WebkitLineClamp: 1, WebkitBoxOrient: 'vertical', whiteSpace: 'normal', overflow: 'hidden' }}>{day.content || day.explanation}</span>
                                                                         <span className="text-xs text-primary font-medium">{day.duration}</span>
                                                                     </div>
                                                                 </div>
@@ -1163,7 +1179,7 @@ Respond with ONLY a valid JSON object in this exact format, no extra text:
             {
                 activeLearningDay && activeLearningDay.data && (
                     <div className="fixed inset-0 bg-black bg-opacity-80 z-50 flex items-center justify-center backdrop-blur-sm" style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0,0,0,0.85)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                        <div className="exam-card glass-panel w-full max-w-3xl animate-fade-in mx-4" style={{ margin: 'auto', maxHeight: '90vh', overflowY: 'auto' }}>
+                        <div ref={learningModalRef} className="exam-card glass-panel w-full max-w-3xl animate-fade-in mx-4" style={{ margin: 'auto', maxHeight: '90vh', overflowY: 'auto' }}>
                             <div className="text-center mb-6">
                                 <span className="badge mb-2">Week {activeLearningDay.weekIdx + 1} • Day {activeLearningDay.dayIdx + 1}</span>
                                 <h2 className="text-gradient">{activeLearningDay.data.topic}</h2>
@@ -1173,7 +1189,9 @@ Respond with ONLY a valid JSON object in this exact format, no extra text:
                             <div className="learning-content text-left space-y-6">
                                 <div className="p-4 bg-dark rounded border border-light">
                                     <h4 className="flex align-center gap-2 mb-2"><Sparkles size={18} className="text-primary" /> Explanation</h4>
-                                    <p className="text-sm leading-relaxed text-secondary">{activeLearningDay.data.content || activeLearningDay.data.explanation}</p>
+                                    <div className="text-sm leading-relaxed text-secondary" style={{ whiteSpace: 'pre-wrap' }}>
+                                        {activeLearningDay.data.content || activeLearningDay.data.explanation}
+                                    </div>
                                 </div>
 
                                 {activeLearningDay.data.key_concepts && (

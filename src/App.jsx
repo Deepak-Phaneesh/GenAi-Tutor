@@ -2,6 +2,7 @@ import { Routes, Route, Navigate } from 'react-router-dom'
 import AppLayout from './components/layout/AppLayout'
 import ProtectedRoute from './components/layout/ProtectedRoute'
 import { AuthProvider } from './lib/AuthContext'
+import ScrollToTop from './components/ScrollToTop'
 
 // Pages
 import Landing from './pages/Landing'
@@ -16,6 +17,7 @@ import Chat from './pages/Chat'
 function App() {
   return (
     <AuthProvider>
+      <ScrollToTop />
       <div className="app-container">
         <Routes>
           {/* Public Routes */}
