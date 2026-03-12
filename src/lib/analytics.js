@@ -1,17 +1,38 @@
 import { supabase } from './supabaseClient';
 
 const CATEGORY_COLORS = {
-    'Machine Learning': '#6366f1', // blue
-    'AI': '#10b981',               // green
-    'Web Development': '#f97316',  // orange
-    'Web Dev': '#f97316',          // orange fallback
-    'Languages': '#a855f7',        // purple
-    'Language': '#a855f7',         // purple fallback
-    'GenAI Tools': '#ec4899',      // pink/alternate
-    'Python': '#eab308'            // yellow
+    'Machine Learning': '#6366f1', // Indigo
+    'AI': '#10b981',               // Emerald
+    'Web Development': '#f97316',  // Orange
+    'Web Dev': '#f97316',
+    'Languages': '#a855f7',        // Purple
+    'English': '#3b82f6',          // Blue
+    'Java': '#ef4444',             // Red
+    'Python': '#eab308',           // Yellow
+    'Javascript': '#ec4899',       // Pink
+    'React': '#06b6d4',            // Cyan
+    'Data Science': '#8b5cf6',      // Violet
+    'Design': '#f43f5e',           // Rose
+    'Business': '#22c55e',          // Green
 };
 
-const DEFAULT_COLOR = '#8b5cf6'; // default purple
+const COLOR_PALETTE = [
+    '#6366f1', '#10b981', '#f97316', '#a855f7', '#3b82f6', 
+    '#ef4444', '#eab308', '#ec4899', '#06b6d4', '#8b5cf6',
+    '#f43f5e', '#22c55e', '#14b8a6', '#f59e0b', '#64748b'
+];
+
+const getCategoryColor = (category) => {
+    if (CATEGORY_COLORS[category]) return CATEGORY_COLORS[category];
+    
+    // Deterministic fallback based on string hash
+    let hash = 0;
+    for (let i = 0; i < category.length; i++) {
+        hash = category.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    const index = Math.abs(hash) % COLOR_PALETTE.length;
+    return COLOR_PALETTE[index];
+};
 
 const normalizeTopic = (topic) => {
     if (!topic) return 'Custom';
@@ -54,7 +75,7 @@ export const fetchLearningSessions = async (userId) => {
         const chartData = Object.keys(groupedData).map(category => ({
             name: category,
             value: groupedData[category].hours,
-            color: CATEGORY_COLORS[category] || DEFAULT_COLOR,
+            color: getCategoryColor(category),
             timeSpent: `${groupedData[category].hours} hours`,
             topics: Array.from(groupedData[category].topics)
         }));
