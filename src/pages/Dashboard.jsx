@@ -340,7 +340,7 @@ export default function Dashboard() {
                                     <h3 className="flex align-center gap-2 text-primary font-bold"><Sparkles size={20} /> Current Active AI Path</h3>
                                 </div>
                                 <div className="widget-list">
-                                    <div className="widget-item">
+                                    <div className="widget-item cursor-pointer hover:bg-white/5 transition-colors" onClick={() => navigate(`/app/generate-path?pathId=${activePath.id}`)}>
                                         <div className="widget-icon bg-primary-light">
                                             <MapIcon className="text-primary" size={18} />
                                         </div>
