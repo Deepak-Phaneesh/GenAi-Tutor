@@ -253,7 +253,7 @@ Rules:
                             <BrainCircuit className="text-primary" size={28} />
                             <h3 className="m-0 text-xl font-semibold">AI Assessment Generator</h3>
                         </div>
-                        <form onSubmit={startAssessment} className="generator-form">
+                        <form onSubmit={startAssessment} className="generator-form" style={{ alignItems: 'flex-end' }}>
                             <div className="input-group m-0 w-full">
                                 <label className="input-label mb-2 block">Domain</label>
                                 <select
@@ -290,7 +290,8 @@ Rules:
                                     <option value="Advanced">Advanced</option>
                                 </select>
                             </div>
-                            <div className="w-full">
+                            <div className="input-group m-0">
+                                <label className="input-label mb-2 block" style={{ opacity: 0, pointerEvents: 'none', userSelect: 'none' }}>_</label>
                                 <button type="submit" className="btn btn-primary w-full" style={{ height: '46px' }}>
                                     <Sparkles size={18} className="mr-2" /> Generate
                                 </button>

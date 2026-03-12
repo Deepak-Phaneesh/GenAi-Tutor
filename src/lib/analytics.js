@@ -13,6 +13,14 @@ const CATEGORY_COLORS = {
 
 const DEFAULT_COLOR = '#8b5cf6'; // default purple
 
+const normalizeTopic = (topic) => {
+    if (!topic) return 'Custom';
+    const lower = topic.toLowerCase().trim();
+    if (lower === 'python') return 'Python';
+    if (lower === 'javascript') return 'Javascript';
+    return topic.charAt(0).toUpperCase() + topic.slice(1).toLowerCase();
+};
+
 export const fetchLearningSessions = async (userId) => {
     if (!userId) return [];
 
@@ -29,12 +37,15 @@ export const fetchLearningSessions = async (userId) => {
 
         // Group by category
         const groupedData = data.reduce((acc, curr) => {
-            if (!acc[curr.category]) {
-                acc[curr.category] = { hours: 0, topics: new Set() };
+            // Normalize category name
+            const category = normalizeTopic(curr.category);
+            
+            if (!acc[category]) {
+                acc[category] = { hours: 0, topics: new Set() };
             }
-            acc[curr.category].hours += curr.hours_spent;
+            acc[category].hours += curr.hours_spent;
             if (curr.topic) {
-                acc[curr.category].topics.add(curr.topic);
+                acc[category].topics.add(normalizeTopic(curr.topic));
             }
             return acc;
         }, {});
@@ -309,8 +320,8 @@ export const fetchLearningPathTopics = async (userId) => {
             return [];
         }
 
-        // Extract distinct topics
-        const topics = [...new Set(data.map(item => item.topic))];
+        // Extract distinct topics and normalize them
+        const topics = [...new Set(data.map(item => normalizeTopic(item.topic)))];
         return topics;
     } catch (e) {
         console.error('Exception fetching learning path topics:', e);
@@ -338,10 +349,11 @@ export const fetchLearningPathAssessments = async (userId) => {
 
         data.forEach(item => {
             const weekLabel = `Week ${item.week_number}`;
+            const normalizedTopicName = normalizeTopic(item.topic);
             if (!weeklyData[weekLabel]) {
                 weeklyData[weekLabel] = { week: weekLabel, rawWeekNum: item.week_number };
             }
-            weeklyData[weekLabel][item.topic] = item.score;
+            weeklyData[weekLabel][normalizedTopicName] = item.score;
         });
 
         return Object.values(weeklyData).sort((a, b) => a.rawWeekNum - b.rawWeekNum);
@@ -360,7 +372,7 @@ export const saveLearningPathAssessment = async (userId, learningPathId, weekNum
                 user_id: userId,
                 learning_path_id: learningPathId || null,
                 week_number: weekNumber,
-                topic,
+                topic: normalizeTopic(topic),
                 score
             }])
             .select()
@@ -515,7 +527,7 @@ export const updateStructuredWeek = async (pathId, weekNumber, updatedWeekData) 
         if (deleteError) throw deleteError;
 
         // 3. Insert new days
-        const daysToInsert = updatedWeekData.days.map(day => ({
+        const daysToInsert = (updatedWeekData.days || []).map(day => ({
             week_id: weekRecord.id,
             day_number: day.dayNumber || day.day,
             topic: day.topic,
@@ -523,6 +535,11 @@ export const updateStructuredWeek = async (pathId, weekNumber, updatedWeekData) 
             practice_exercise: day.practice_suggestion || day.practice_exercise || '',
             duration: day.duration || ''
         }));
+
+        if (daysToInsert.length === 0) {
+            console.warn('No days to update for week:', weekNumber);
+            return true; // Or false depending on desired behavior, but preventing crash is priority
+        }
 
         const { error: insertError } = await supabase
             .from('learning_path_days')

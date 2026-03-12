@@ -584,7 +584,8 @@ Return ONLY valid JSON: {"exam": [{"text": "...", "options": ["A", "B", "C", "D"
             const currentWeekData = generatedData.path[weekIdx];
             const weeklyTopics = (currentWeekData.days || []).map(d => d.topic).filter(Boolean);
 
-            saveWeeklyAssessmentResult(
+            // 1. Save results to the detailed table
+            await saveWeeklyAssessmentResult(
                 user.id,
                 pathId,
                 weekIdx + 1,
@@ -594,7 +595,16 @@ Return ONLY valid JSON: {"exam": [{"text": "...", "options": ["A", "B", "C", "D"
                 activeWeeklyAssessment?.questions?.length || 15
             );
 
-            updateProgressMetric(user.id, { assessments_taken: 1 });
+            // Also save to learning_path_assessments for the dashboard chart
+            await saveLearningPathAssessment(
+                user.id,
+                pathId,
+                weekIdx + 1,
+                formData.skill || 'Custom',
+                score
+            );
+
+            await updateProgressMetric(user.id, { assessments_taken: 1 });
             window.dispatchEvent(new Event('refresh-dashboard'));
         }
 
@@ -617,18 +627,26 @@ Return ONLY valid JSON: {"exam": [{"text": "...", "options": ["A", "B", "C", "D"
             const currentWeekTopics = (currentWeekData.days || []).map(d => d.topic).join(', ');
             const nextWeekOriginal = (generatedData.path || [])[weekIdx + 1];
 
-            const prompt = `The user scored ${score}% in the weekly assessment.
-            Weak topics: ${currentWeekTopics}.
-            Planned next week: ${nextWeekOriginal.title}.
+            const prompt = `The user scored ${score}% in the weekly assessment for Week ${weekIdx + 1}.
+            Current Week Topics: ${currentWeekTopics}.
+            Originally planned Next Week (${nextWeekNum}): "${nextWeekOriginal?.title || 'Next Steps'}".
             
-            Modify the next week's learning plan to include revision of the weak topics for the first 2 days and then continue with new planned topics.
+            ADAPTIVE REGENERATION TASK:
+            Modify the content for Week ${nextWeekNum}. 
+            Because the user scored below 70%, dedicate Day 1 and Day 2 of the NEW Week ${nextWeekNum} to REVISION and reinforcement of the weak topics listed above. 
+            Days 3-6 should then continue with the originally planned progression.
+            Day 7 is always the Weekly Assessment Topics.
             
-            Format:
-            Week ${nextWeekNum}:
-            Day 1 - Topic... (ensure "content" is a detailed explanation roughly 3 lines long)
-            Day 7 - Weekly Assessment Topics.
+            REQUIRED JSON STRUCTURE:
+            {
+              "title": "Week ${nextWeekNum}: [New Descriptive Title]",
+              "days": [
+                { "day": 1, "topic": "Revision: ...", "content": "Detailed 3-line explanation...", "duration": "2 hours", "practice_suggestion": "...", "resources": ["Url1"] },
+                ... up to Day 7
+              ]
+            }
             
-            Return ONLY a valid JSON object for the NEW Week ${nextWeekNum}, matching the schema exactly (title, days array with 7 elements).`;
+            Return ONLY the valid JSON object for Week ${nextWeekNum}. No conversational filler.`;
 
             const apiKey = import.meta.env.VITE_GROQ_API_KEY;
             if (!apiKey) throw new Error('API Key is missing');
@@ -657,11 +675,27 @@ Return ONLY valid JSON: {"exam": [{"text": "...", "options": ["A", "B", "C", "D"
                 }
             };
 
-            const updatedNextWeek = await groqRequest(apiKey, {
+            let updatedNextWeek = await groqRequest(apiKey, {
                 model: "llama-3.1-8b-instant",
                 response_format: { type: "json_object" },
                 messages: [{ role: "user", content: prompt }]
             }, null);
+
+            // Robust unwrapping: AI sometimes nests under "week", "curriculum", etc.
+            if (updatedNextWeek && !updatedNextWeek.days) {
+                const possibleKeys = ['week', 'curriculum', 'path', 'nextWeek', `week${nextWeekNum}`];
+                for (const key of possibleKeys) {
+                    if (updatedNextWeek[key] && updatedNextWeek[key].days) {
+                        updatedNextWeek = updatedNextWeek[key];
+                        break;
+                    }
+                }
+            }
+
+            // Validation check
+            if (!updatedNextWeek || !Array.isArray(updatedNextWeek.days)) {
+                throw new Error('AI returned an invalid week structure (missing days).');
+            }
 
             setGeneratedData(prev => {
                 const newPath = [...prev.path];

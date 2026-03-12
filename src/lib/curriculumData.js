@@ -159,9 +159,11 @@ export const getFallbackPath = (skill, weeks) => {
 
     // 2. Fuzzy match for programming languages only
     if (!template) {
-        const match = Object.keys(CURRICULUM_DATABASE).find(k =>
-            key.includes(k) || k.includes(key) || (k === 'javascript' && key.includes('js'))
-        );
+        const match = Object.keys(CURRICULUM_DATABASE).find(k => {
+            // Special exemption: If the user explicitly asks for "java", do not match it with "javascript"
+            if (key === 'java' || key.startsWith('java ')) return false;
+            return key.includes(k) || (k === 'javascript' && key.includes('js'));
+        });
         // Only use a programming template if it actually matches — never default to Python for non-programming skills
         template = match ? CURRICULUM_DATABASE[match] : null;
     }
@@ -172,30 +174,45 @@ export const getFallbackPath = (skill, weeks) => {
     if (template) {
         // Use the matched programming template
         for (let i = 0; i < weeksCount; i++) {
+            const phase = i === 0 ? "Fundamentals" : (i < weeksCount / 2 ? "Core" : "Advanced");
             finalPath.push({
-                title: `${template.path[0].title} - Part ${i + 1}`,
-                days: [...template.path[0].days]
+                week: i + 1,
+                title: `${template.path[0].title} (${phase} - Part ${i + 1})`,
+                days: template.path[0].days.map((d, idx) => ({ 
+                    ...d, 
+                    day: idx + 1,
+                    topic: `${d.topic} - ${phase} ${i + 1}`
+                }))
             });
         }
         return { path: finalPath, exam: template.exam };
     }
 
-    // 3. Generic fallback for any non-programming skill (languages, business, etc.)
+    // 3. Generic fallback for any non-programming skill
     const capitalSkill = skill.charAt(0).toUpperCase() + skill.slice(1);
-    const genericDays = [
-        { topic: `Introduction to ${capitalSkill}`, duration: '1 hour', explanation: `Gaining a robust initial understanding of ${capitalSkill} fundamentally anchors your comprehensive journey seamlessly sequentially enabling highly precise strategic implementations globally accurately dynamically.\\n\\nEffectively analyzing operational implementations structurally naturally clarifies explicitly targeted foundational benchmarks standardizing logical procedures optimizing operational performance metrics logically predictably systematically cleanly successfully properly completely dynamically safely.\\n\\nStructurally investigating standardized components logically effectively universally dramatically expands sequential knowledge processing dynamically completely safely naturally systematically resolving developmental boundaries exceptionally effectively effortlessly comprehensively intelligently completely natively precisely systematically naturally.`, key_concepts: ['Overview', 'Goals', 'Structure'], practice_task: `Research what ${capitalSkill} is used for and write a short summary.` },
-        { topic: `Core Fundamentals`, duration: '1.5 hours', explanation: `Mastering foundational architectural building blocks fundamentally categorically secures advanced operational stability seamlessly consistently explicitly naturally generating scalable implementation schemas programmatically mathematically dynamically continuously securely logically perfectly properly.\\n\\nTheoretically establishing functional principles dramatically critically streamlines logically systematically inherently optimizing process integrations algorithmically categorically resolving typical workflow disruptions predictably systematically cleanly universally dynamically dependably naturally completely flawlessly effectively.\\n\\nRecognizing explicit terminology dynamically logically naturally effortlessly empowers systematic engineering communication completely explicitly intelligently dramatically sequentially comprehensively constructing standardized operational processes naturally practically seamlessly successfully securely completely dependably expertly professionally dynamically effortlessly.`, key_concepts: ['Basics', 'Principles', 'Terminology'], practice_task: `List 5 key terms related to ${capitalSkill} and write a one-sentence definition for each.` },
-        { topic: `Practical Application`, duration: '2 hours', explanation: `Syntactically directly actively implementing functional prototypes logically categorically physically dynamically establishes exceptionally comprehensive algorithmic retention dramatically consistently inherently standardizing development workflows systematically perfectly cleanly naturally professionally expertly safely naturally.\\n\\nEmpirically investigating practical real-world architecture definitively predictably intuitively seamlessly validates experimental theoretical foundations dynamically generating functional verifiable outcomes inherently algorithmically processing components properly systematically intelligently perfectly seamlessly naturally dynamically completely safely effectively.\\n\\nSystematically evaluating empirical metrics structurally organically effectively intuitively accelerates advanced skill acquisition dynamically conclusively universally clearly cleanly generating exceptional robust engineering results naturally correctly logically physically comprehensively securely intuitively beautifully predictably intuitively.`, key_concepts: ['Application', 'Practice', 'Examples'], practice_task: `Find a real-world example of ${capitalSkill} in use and describe how the concepts apply.` },
-        { topic: `Intermediate Concepts`, duration: '2 hours', explanation: `Expanding conceptual architectures progressively cleanly naturally explicitly transitions foundational processing systematically effectively universally intelligently mapping highly structurally dense matrix components properly completely dependably seamlessly flawlessly natively.\\n\\nAnalytically defining systematic abstraction layers physically inherently strategically significantly streamlines algorithmic workflow integration dynamically inherently mathematically expertly standardizing project specifications conclusively smoothly actively completely intuitively dependably beautifully seamlessly safely practically seamlessly.\\n\\nStructurally dissecting complex multi-level architectures definitively explicitly categorically effortlessly generates comprehensive nuanced systematic understanding predictably intuitively naturally dynamically generating intelligent optimization patterns actively sequentially smoothly successfully dynamically logically accurately comprehensively expertly intelligently expertly effortlessly.`, key_concepts: ['Intermediate level', 'Depth', 'Analysis'], practice_task: `Compare two different approaches or methods within ${capitalSkill}.` },
-        { topic: `Common Challenges`, duration: '1.5 hours', explanation: `Strategically auditing conventional engineering bottlenecks explicitly organically conclusively dynamically guarantees predictive robust programmatic continuity seamlessly intelligently naturally cleanly systematically identifying operational risks decisively thoroughly structurally effectively completely.\\n\\nIntelligently formulating algorithmic mitigation strategies naturally categorically physically sequentially inherently optimally accelerates developmental throughput cleanly dramatically functionally continuously completely actively inherently flawlessly generating exceptional systematic architecture securely gracefully securely fully smoothly dependably correctly completely intuitively naturally.\\n\\nProgrammatically debugging syntactical procedural anomalies proactively systematically gracefully definitively successfully significantly dramatically improves architectural operational functionality fully actively dependably seamlessly clearly comprehensively elegantly properly thoroughly intuitively structurally perfectly fundamentally flawlessly organically practically.`, key_concepts: ['Challenges', 'Problem solving', 'Strategy'], practice_task: `Identify one challenge you have faced when learning ${capitalSkill} and describe how you would solve it.` },
-        { topic: `Advanced Topics & Best Practices`, duration: '2 hours', explanation: `Systematically implementing standardized engineering logic definitively accurately systematically categorically consistently completely maximizes structural algorithm execution dynamically reliably effectively conclusively naturally efficiently smoothly expertly fully efficiently seamlessly flawlessly optimally perfectly brilliantly naturally.\\n\\nHistorically mastering complex professional architectural schemas natively intuitively fundamentally seamlessly universally physically clearly establishes authoritative robust operational excellence dynamically functionally natively dynamically producing elite fully mature components automatically actively inherently beautifully consistently fundamentally systematically organically effortlessly definitively smoothly.\\n\\nAggressively incorporating verified optimization techniques functionally completely significantly definitively dramatically fully universally elevates programmatic processing efficiently mathematically systematically continuously expertly solidly functionally structurally effectively correctly practically organically beautifully smoothly confidently fully logically cleanly brilliantly elegantly expertly.`, key_concepts: ['Advanced', 'Best Practices', 'Mastery'], practice_task: `Read one expert article or resource about ${capitalSkill} and summarize its key takeaways.` },
+    const genericTopics = [
+        "Introduction & History", "Basic Principles", "Core Concepts", 
+        "Fundamental Techniques", "Common Tools", "Practical Exercises",
+        "Intermediate Theory", "Applied Methodologies", "Workflow Optimization",
+        "Advanced Strategies", "Industry Best Practices", "Case Studies",
+        "Final Review & Mastery", "Future Trends", "Expert Analysis"
     ];
 
     for (let i = 0; i < weeksCount; i++) {
+        const weekTopicIndex = i % genericTopics.length;
+        const phase = i < 2 ? "Basics" : (i < 6 ? "Intermediate" : "Advanced");
+        
         finalPath.push({
             week: i + 1,
-            title: `${capitalSkill} Mastery — Week ${i + 1}`,
-            days: genericDays.map((d, idx) => ({ day: idx + 1, ...d }))
+            title: `${capitalSkill} ${phase} - Week ${i + 1}`,
+            days: Array.from({ length: 6 }).map((_, idx) => ({
+                day: idx + 1,
+                topic: `${genericTopics[(weekTopicIndex + idx) % genericTopics.length]} (${phase})`,
+                duration: '1.5 hours',
+                explanation: `Detailed explanation for ${capitalSkill} development in the context of ${phase} logic. Mastery of these concepts is essential for professional progression.`,
+                key_concepts: ['Overview', 'Application', 'Mastery'],
+                practice_task: `Complete a practical exercise based on ${genericTopics[(weekTopicIndex + idx) % genericTopics.length]}.`
+            }))
         });
     }
 
@@ -218,9 +235,10 @@ export const getFallbackAssessment = (skill) => {
 
     // 2. Fuzzy match for programming skills only
     if (!template) {
-        const match = Object.keys(CURRICULUM_DATABASE).find(k =>
-            key.includes(k) || k.includes(key) || (k === 'javascript' && key.includes('js'))
-        );
+        const match = Object.keys(CURRICULUM_DATABASE).find(k => {
+            if (key === 'java' || key.startsWith('java ')) return false;
+            return key.includes(k) || (k === 'javascript' && key.includes('js'));
+        });
         template = match ? CURRICULUM_DATABASE[match] : null;
     }
 

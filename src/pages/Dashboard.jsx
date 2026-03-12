@@ -82,8 +82,9 @@ export default function Dashboard() {
                 ]);
 
                 // Update charts
-                setPieData(sessionsData); // Renamed from setLearningData
+                setPieData(sessionsData); 
                 setAvailableTopics(topicsData);
+                setLineData(timelineData);
 
                 // Filter Timeline Data if a specific topic is selected
                 let filteredTimeline = timelineData;
