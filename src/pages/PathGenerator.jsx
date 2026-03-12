@@ -1,10 +1,11 @@
 import { useState, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../lib/AuthContext';
 import { updateProgressMetric } from '../lib/progress';
 import {
     saveLearningPath,
     fetchActiveLearningPath,
+    fetchLearningPathById,
     saveLearningPathAssessment,
     saveLearningSession,
     saveWeeklyAssessmentResult,
@@ -221,29 +222,39 @@ export default function PathGenerator() {
         }
     }, [generatedData, completedDays, step, formData, user, pathId]);
 
+    const [searchParams] = useSearchParams();
+    const specificPathId = searchParams.get('pathId');
+
     // Restore state from dashboard
     useEffect(() => {
-        const loadActivePath = async () => {
+        const loadPath = async () => {
             if (user?.id) {
-                const activePath = await fetchActiveLearningPath(user.id);
-                if (activePath && activePath.path_data && !hasStartedGeneration) {
+                let targetPath = null;
+                
+                if (specificPathId) {
+                    targetPath = await fetchLearningPathById(user.id, specificPathId);
+                } else {
+                    targetPath = await fetchActiveLearningPath(user.id);
+                }
+
+                if (targetPath && targetPath.path_data && !hasStartedGeneration) {
                     setFormData({
-                        skill: activePath.skill,
-                        domain: activePath.domain,
-                        level: activePath.level,
-                        weeks: activePath.weeks
+                        skill: targetPath.skill,
+                        domain: targetPath.domain,
+                        level: targetPath.level,
+                        weeks: targetPath.weeks
                     });
 
-                    const pData = activePath.path_data;
-                    setPathId(activePath.id);
+                    const pData = targetPath.path_data;
+                    setPathId(targetPath.id);
                     setCompletedDays(pData.completedDays || {});
                     setGeneratedData({ exam: pData.exam, path: pData.path });
                     setStep(4); // Jump directly to the result view
                 }
             }
         };
-        loadActivePath();
-    }, [user]);
+        loadPath();
+    }, [user, specificPathId]);
 
     const handleGenerate = async (e) => {
         e.preventDefault();

@@ -429,7 +429,7 @@ export default function Dashboard() {
                         <div className="widget-list">
                             {recentPaths.length > 0 ? (
                                 recentPaths.map(item => (
-                                    <div key={item.id} className="widget-item">
+                                    <div key={item.id} className="widget-item cursor-pointer hover:bg-white/5 transition-colors" onClick={() => navigate(`/app/generate-path?pathId=${item.id}`)}>
                                         <div className="widget-icon bg-primary-light">
                                             <TrendingUp className="text-primary" size={18} />
                                         </div>

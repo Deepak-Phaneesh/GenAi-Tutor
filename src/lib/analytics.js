@@ -199,6 +199,43 @@ export const saveAssessmentResult = async (userId, domain, skill, level, score, 
     }
 };
 
+export const fetchLearningPathById = async (userId, pathId) => {
+    if (!userId || !pathId) return null;
+
+    try {
+        const { data, error } = await supabase
+            .from('learning_paths')
+            .select('*')
+            .eq('id', pathId)
+            .eq('user_id', userId)
+            .single();
+
+        if (error) {
+            console.error('Error fetching learning path by ID:', error);
+            return null;
+        }
+
+        const { count, error: countError } = await supabase
+            .from('learning_path_assessments')
+            .select('week_number', { count: 'exact', head: true })
+            .eq('learning_path_id', data.id);
+
+        let progress = 0;
+        if (!countError && data.weeks > 0) {
+            progress = Math.round(((count || 0) / data.weeks) * 100);
+            if (progress > 100) progress = 100;
+        }
+
+        return {
+            ...data,
+            progress
+        };
+    } catch (e) {
+        console.error('Exception fetching learning path by ID:', e);
+        return null;
+    }
+};
+
 export const fetchActiveLearningPath = async (userId) => {
     if (!userId) return null;
 
