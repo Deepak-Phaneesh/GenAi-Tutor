@@ -173,12 +173,7 @@ export default function PathGenerator() {
     // { topic: string, questions: [], currentIdx: 0, answers: {}, loading: boolean }
     const [activeQuickQuiz, setActiveQuickQuiz] = useState(null);
 
-    // AI Study Buddy Chat State: { messages: [{role, content}], loading: boolean, input: string }
-    const [studyBuddy, setStudyBuddy] = useState({
-        messages: [],
-        loading: false,
-        input: ''
-    });
+
 
     // Ref for the daily learning modal scroll container
     const learningModalRef = useRef(null);
@@ -536,12 +531,6 @@ Return ONLY valid JSON: {"exam": [{"text": "...", "options": ["A", "B", "C", "D"
             dayIdx,
             data: dayData
         });
-        // Reset Study Buddy chat for the new topic
-        setStudyBuddy({
-            messages: [{ role: 'assistant', content: `Hi! I'm your AI Study Buddy for **${dayData.topic}**. Ask me anything about today's lesson!` }],
-            loading: false,
-            input: ''
-        });
     };
 
     const handleFinishLearningDay = async () => {
@@ -795,60 +784,7 @@ Respond with ONLY a valid JSON object in this exact format, no extra text:
         }
     };
 
-    const handleBuddyAsk = async (e) => {
-        if (e) e.preventDefault();
-        if (!studyBuddy.input.trim() || studyBuddy.loading) return;
 
-        const userMsg = studyBuddy.input.trim();
-        const newMessages = [...studyBuddy.messages, { role: 'user', content: userMsg }];
-        
-        setStudyBuddy(prev => ({ 
-            ...prev, 
-            messages: newMessages, 
-            loading: true, 
-            input: '' 
-        }));
-
-        try {
-            const apiKey = import.meta.env.VITE_GROQ_API_KEY;
-            const topicContext = activeLearningDay?.data?.topic || "this topic";
-            const contentContext = activeLearningDay?.data?.content || "";
-            
-            const prompt = `You are a helpful AI Study Buddy. The user is currently learning about: ${topicContext}.
-            Context from the lesson: ${contentContext}
-            
-            Answer the user's question clearly and concisely. If they ask for examples, provide them.
-            User Question: ${userMsg}
-            
-            IMPORTANT: Return your response as a JSON object with an "answer" field.
-            Example: {"answer": "Your explanation here..."}`;
-
-            const response = await groqRequest(apiKey, {
-                model: "llama-3.1-8b-instant",
-                response_format: { type: "json_object" },
-                messages: [
-                    { role: "system", content: "You are a helpful Tutor. Keep answers short, encouraging, and focused on the current topic. Always return JSON." },
-                    ...studyBuddy.messages.slice(-4).map(m => ({ role: m.role, content: m.content })), 
-                    { role: "user", content: prompt }
-                ]
-            });
-
-            const buddyReply = response.answer || response.explanation || "I'm sorry, I couldn't process that. Can you rephrase?";
-
-            setStudyBuddy(prev => ({
-                ...prev,
-                messages: [...newMessages, { role: 'assistant', content: buddyReply }],
-                loading: false
-            }));
-        } catch (error) {
-            console.error("Study Buddy Error:", error);
-            setStudyBuddy(prev => ({
-                ...prev,
-                messages: [...newMessages, { role: 'assistant', content: "Sorry, I'm having trouble connecting right now. Please try again!" }],
-                loading: false
-            }));
-        }
-    };
 
     const startQuickQuiz = async (topic) => {
         setActiveQuickQuiz({
@@ -1405,55 +1341,6 @@ Respond with ONLY a valid JSON object in this exact format, no extra text:
                                             </button>
                                         </div>
                                     )}
-                                </div>
-
-                                {/* Right Side: AI Study Buddy Chat */}
-                                <div className="w-80 glass-panel p-0 flex flex-col border border-primary border-opacity-20 shadow-2xl overflow-hidden" style={{ height: '400px' }}>
-                                    <div className="p-3 border-b border-light flex align-center gap-2 bg-primary-light">
-                                        <Sparkles size={16} className="text-primary pulse-animation" />
-                                        <span className="text-xs font-bold uppercase tracking-wider text-primary">AI Study Buddy</span>
-                                    </div>
-                                    
-                                    <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-dark bg-opacity-50 chat-container">
-                                        {studyBuddy.messages.map((msg, i) => (
-                                            <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                                                <div className={`max-w-[90%] p-3 rounded-2xl text-xs leading-relaxed ${
-                                                    msg.role === 'user' 
-                                                        ? 'bg-primary text-white rounded-br-none' 
-                                                        : 'bg-dark border border-light text-secondary rounded-bl-none shadow-sm'
-                                                }`}>
-                                                    {msg.content}
-                                                </div>
-                                            </div>
-                                        ))}
-                                        {studyBuddy.loading && (
-                                            <div className="flex justify-start">
-                                                <div className="bg-dark border border-light p-3 rounded-2xl rounded-bl-none">
-                                                    <span className="dot-flashing"></span>
-                                                </div>
-                                            </div>
-                                        )}
-                                    </div>
-
-                                    <form onSubmit={handleBuddyAsk} className="p-3 border-t border-light bg-dark">
-                                        <div className="relative">
-                                            <input 
-                                                type="text" 
-                                                className="w-full bg-dark border border-light rounded-full py-2 px-4 pr-10 text-xs focus:border-primary outline-none transition-all placeholder:text-muted"
-                                                placeholder="Ask a question..."
-                                                value={studyBuddy.input}
-                                                onChange={(e) => setStudyBuddy(prev => ({ ...prev, input: e.target.value }))}
-                                                disabled={studyBuddy.loading}
-                                            />
-                                            <button 
-                                                type="submit"
-                                                className="absolute right-2 top-1/2 -translate-y-1/2 text-primary hover:text-white disabled:opacity-50"
-                                                disabled={!studyBuddy.input.trim() || studyBuddy.loading}
-                                            >
-                                                <Send size={16} />
-                                            </button>
-                                        </div>
-                                    </form>
                                 </div>
                             </div>
                         </div>
