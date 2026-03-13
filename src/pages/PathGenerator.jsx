@@ -853,12 +853,10 @@ Respond with ONLY a valid JSON object in this exact format, no extra text:
     return (
         <>
             <div className="path-container">
-                {step !== 4 && (
-                    <header className="page-header animate-fade-in">
-                        <h1 className="text-gradient">AI Path Generator</h1>
-                        <p className="text-secondary">Customized curriculums tailored to your goals and schedule.</p>
-                    </header>
-                )}
+                <header className="page-header animate-fade-in">
+                    <h1 className="text-gradient">AI Path Generator</h1>
+                    <p className="text-secondary">Customized curriculums tailored to your goals and schedule.</p>
+                </header>
 
                 {/* Step 1: Configuration Form */}
                 {step === 1 && (
@@ -1051,8 +1049,9 @@ Respond with ONLY a valid JSON object in this exact format, no extra text:
                     </div>
                 )}
 
+                {/* Step 4: Generated Result */}
                 {step === 4 && (
-                    <div className="result-view animate-fade-in">
+                    <div className="result-view animate-fade-in mt-6">
                         {!pathArray || !Array.isArray(pathArray) || pathArray.length === 0 ? (
                             <div className="glass-panel text-center py-12">
                                 <h2 className="text-error mb-4">Generation Error</h2>
@@ -1061,23 +1060,38 @@ Respond with ONLY a valid JSON object in this exact format, no extra text:
                             </div>
                         ) : (
                             <>
-                                <div className="flex justify-between items-center mb-6">
-                                    <h2 className="text-gradient">{formData.skill || 'Custom'} Masterclass</h2>
-                                    <button 
-                                        className="btn btn-outline btn-sm" 
-                                        onClick={() => { setStep(1); setCompletedDays({}); setGeneratedData(null); setHasStartedGeneration(false); }}
-                                    >
-                                        Restart Generator
-                                    </button>
-                                </div>
-                                
-                                {isUpdatingTimeline && (
-                                    <div className="alert-info mb-6 p-3 bg-primary-light border border-primary rounded text-sm text-center flex justify-center align-center gap-2">
-                                        <Sparkles size={16} className="pulse-animation text-primary" /> AI is dynamically regenerating your curriculum based on your assessment...
+                                <div className="result-header glass-panel mb-6">
+                                    <div className="flex justify-between align-start flex-wrap gap-4">
+                                        <div>
+                                            <h2>{formData.skill || 'Custom'} Masterclass</h2>
+                                            <div className="flex gap-4 mt-2 text-secondary">
+                                                <span className="flex align-center gap-2"><MapPin size={16} /> {formData.domain.toUpperCase()}</span>
+                                                <span className="flex align-center gap-2"><GraduationCap size={16} /> Level {formData.level}</span>
+                                                <span className="flex align-center gap-2"><Clock size={16} /> {formData.weeks} Weeks</span>
+                                            </div>
+                                        </div>
+                                        <div className="text-right">
+                                            <div className="confidence-score mb-1">
+                                                <strong className={`${scorePercentage >= 70 ? 'text-success' : (scorePercentage >= 40 ? 'text-warning' : 'text-error')} text-lg`}>
+                                                    {scorePercentage}%
+                                                </strong> Score
+                                            </div>
+                                            <p className="text-sm text-secondary">Based on assessment</p>
+                                        </div>
                                     </div>
-                                )}
 
-                                <div className="timeline-grid">
+                                    {/* Temporarily kept as "Reset/Start Over" - logic later to mark as complete/inactive */}
+                                    <button className="btn btn-primary w-full mt-6" onClick={() => { setStep(1); setCompletedDays({}); setGeneratedData(null); setHasStartedGeneration(false); }}>
+                                        Restart Path Generator
+                                    </button>
+
+                                    {isUpdatingTimeline && (
+                                        <div className="alert-info mt-4 p-3 bg-primary-light border border-primary rounded text-sm text-center flex justify-center align-center gap-2">
+                                            <Sparkles size={16} className="pulse-animation text-primary" /> AI is dynamically regenerating your curriculum based on your assessment...
+                                        </div>
+                                    )}
+                                </div>
+                                <div className="timeline-grid mt-4">
                                     {pathArray.map((week, idx) => {
                                         const isWeekUnlocked = idx === 0 || isWeekFullyCompleted(idx - 1);
 
@@ -1114,10 +1128,10 @@ Respond with ONLY a valid JSON object in this exact format, no extra text:
 
                                                     {/* Assessment Day for every week */}
                                                     <div className="day-item assessment-day mt-4 pt-4 border-t border-light">
-                                                        <div className={`day-marker ${isWeekFullyCompleted(idx) ? 'bg-primary text-white shadow-glow' : 'bg-dark text-muted'}`}>Day 7</div>
+                                                        <div className={`day-marker ${isWeekFullyCompleted(idx) ? 'bg-warning text-dark' : 'bg-dark text-muted'}`}>Day 7</div>
                                                         <div className="day-content flex justify-between align-center flex-wrap gap-2 w-full">
                                                             <div>
-                                                                <p className={`font-semibold ${isWeekFullyCompleted(idx) ? 'text-primary' : 'text-muted'}`}>Weekly Checkpoint Assessment</p>
+                                                                <p className={`font-semibold ${isWeekFullyCompleted(idx) ? 'text-warning' : 'text-muted'}`}>Weekly Checkpoint Assessment</p>
                                                                 <span className="text-xs text-secondary">Dynamic • AI Graded</span>
                                                             </div>
 
@@ -1267,9 +1281,9 @@ Respond with ONLY a valid JSON object in this exact format, no extra text:
                                 )}
 
                                 {activeLearningDay.data.practice_task && (
-                                    <div className="mt-4 p-4 border border-primary border-opacity-30 rounded bg-primary-light">
-                                        <h4 className="flex align-center gap-2 mb-2 text-primary font-bold"><CheckCircle2 size={18} /> Practice Task</h4>
-                                        <p className="text-sm text-secondary">{activeLearningDay.data.practice_task}</p>
+                                    <div className="mt-4 p-4 border border-warning rounded bg-warning-light">
+                                        <h4 className="flex align-center gap-2 mb-2 text-warning"><CheckCircle2 size={18} /> Practice Task</h4>
+                                        <p className="text-sm">{activeLearningDay.data.practice_task}</p>
                                     </div>
                                 )}
 
