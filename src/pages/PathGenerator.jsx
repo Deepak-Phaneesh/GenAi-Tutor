@@ -1114,10 +1114,10 @@ Respond with ONLY a valid JSON object in this exact format, no extra text:
 
                                                     {/* Assessment Day for every week */}
                                                     <div className="day-item assessment-day mt-4 pt-4 border-t border-light">
-                                                        <div className={`day-marker ${isWeekFullyCompleted(idx) ? 'bg-warning text-dark' : 'bg-dark text-muted'}`}>Day 7</div>
+                                                        <div className={`day-marker ${isWeekFullyCompleted(idx) ? 'bg-primary text-white shadow-glow' : 'bg-dark text-muted'}`}>Day 7</div>
                                                         <div className="day-content flex justify-between align-center flex-wrap gap-2 w-full">
                                                             <div>
-                                                                <p className={`font-semibold ${isWeekFullyCompleted(idx) ? 'text-warning' : 'text-muted'}`}>Weekly Checkpoint Assessment</p>
+                                                                <p className={`font-semibold ${isWeekFullyCompleted(idx) ? 'text-primary' : 'text-muted'}`}>Weekly Checkpoint Assessment</p>
                                                                 <span className="text-xs text-secondary">Dynamic • AI Graded</span>
                                                             </div>
 
@@ -1267,9 +1267,9 @@ Respond with ONLY a valid JSON object in this exact format, no extra text:
                                 )}
 
                                 {activeLearningDay.data.practice_task && (
-                                    <div className="mt-4 p-4 border border-warning rounded bg-warning-light">
-                                        <h4 className="flex align-center gap-2 mb-2 text-warning"><CheckCircle2 size={18} /> Practice Task</h4>
-                                        <p className="text-sm">{activeLearningDay.data.practice_task}</p>
+                                    <div className="mt-4 p-4 border border-primary border-opacity-30 rounded bg-primary-light">
+                                        <h4 className="flex align-center gap-2 mb-2 text-primary font-bold"><CheckCircle2 size={18} /> Practice Task</h4>
+                                        <p className="text-sm text-secondary">{activeLearningDay.data.practice_task}</p>
                                     </div>
                                 )}
 
