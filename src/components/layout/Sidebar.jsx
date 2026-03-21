@@ -9,7 +9,7 @@ import {
 } from 'lucide-react';
 import './Sidebar.css';
 
-export default function Sidebar() {
+export default function Sidebar({ isOpen, setIsOpen }) {
     const navigate = useNavigate();
 
     const handleLogout = () => {
@@ -17,8 +17,8 @@ export default function Sidebar() {
     };
 
     return (
-        <aside className="sidebar glass-panel">
-            <div className="sidebar-header">
+        <aside className={`sidebar glass-panel ${isOpen ? 'open' : ''}`}>
+            <div className="sidebar-header desktop-only">
                 <h2 className="text-gradient">GenAI Tutor</h2>
             </div>
 

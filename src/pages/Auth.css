@@ -268,3 +268,23 @@
     padding-top: 1.5rem;
     border-top: 1px solid var(--border-light);
 }
+
+@media (max-width: 768px) {
+    .auth-card {
+        padding: 1.5rem;
+    }
+    .auth-header h2 {
+        font-size: 1.75rem;
+    }
+    .btn-group, .radio-group {
+        flex-direction: column;
+    }
+    .verification-code-group {
+        gap: 0.25rem;
+    }
+    .code-input {
+        width: 40px;
+        height: 48px;
+        font-size: 1.25rem;
+    }
+}

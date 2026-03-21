@@ -237,3 +237,71 @@ a:hover {
 ::-webkit-scrollbar-thumb:hover {
   background: var(--accent-primary);
 }
+
+/* ========= RESPONSIVE STYLES ========= */
+
+/* Mobile Header (AppLayout) */
+.mobile-header {
+  display: none;
+  background: var(--bg-glass);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--border-light);
+  padding: 1rem 1.5rem;
+  position: sticky;
+  top: 0;
+  z-index: 40;
+}
+
+.mobile-header-content {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.mobile-header h2 {
+  font-size: 1.25rem;
+  margin: 0;
+}
+
+.menu-toggle {
+  padding: 0.5rem;
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.sidebar-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(4px);
+  z-index: 45;
+  animation: fadeIn var(--transition-fast) forwards;
+}
+
+@media (max-width: 768px) {
+  .app-container {
+    flex-direction: column;
+  }
+  
+  .mobile-header {
+    display: block;
+  }
+  
+  .main-content {
+    height: calc(100vh - 65px); /* Header height ~65px */
+  }
+
+  .page-container {
+    padding: 1rem;
+  }
+
+  html {
+    font-size: 14px;
+  }
+}

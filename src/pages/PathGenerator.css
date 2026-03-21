@@ -546,4 +546,39 @@
     position: absolute;
     opacity: 0;
     cursor: pointer;
+}
+
+@media (max-width: 768px) {
+    .generator-form {
+        padding: 1.5rem 1rem;
+    }
+    .pg-section {
+        padding: 1.5rem 1rem;
+    }
+    .pg-divider {
+        margin: 0 1rem;
+    }
+    .pg-cta {
+        padding: 1.5rem 1rem;
+    }
+    .radio-grid {
+        grid-template-columns: 1fr;
+    }
+    .info-card {
+        padding: 1.5rem;
+        position: static;
+    }
+    .timeline-grid {
+        grid-template-columns: 1fr;
+    }
+    .timeline-week {
+        padding: 1rem;
+    }
+    .day-marker {
+        width: 45px;
+        font-size: 0.75rem;
+    }
+    .exam-card {
+        padding: 1.5rem;
+    }
 }

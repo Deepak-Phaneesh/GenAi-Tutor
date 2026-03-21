@@ -299,3 +299,20 @@
     right: 0.75rem;
     pointer-events: none;
 }
+
+@media (max-width: 768px) {
+    .sandbox-container {
+        height: auto;
+        min-height: calc(100vh - 65px);
+    }
+    .sandbox-workspace {
+        display: flex;
+        flex-direction: column;
+    }
+    .editor-wrapper {
+        min-height: 300px;
+    }
+    .terminal-panel, .ai-chat-panel {
+        min-height: 250px;
+    }
+}
