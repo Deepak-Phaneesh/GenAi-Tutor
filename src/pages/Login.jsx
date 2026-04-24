@@ -95,7 +95,14 @@ export default function Login() {
 
                 {errorMsg && (
                     <div style={{ color: 'var(--error)', padding: '0.75rem', background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.2)', borderRadius: '8px', marginBottom: '1rem', textAlign: 'center', fontSize: '0.875rem' }}>
-                        {errorMsg}
+                        {errorMsg === 'Invalid login credentials' ? (
+                            <>
+                                {errorMsg}<br />
+                                <span style={{ fontSize: '0.75rem', opacity: 0.8, marginTop: '0.5rem', display: 'block' }}>
+                                    Hint: Make sure your email is confirmed. Check your inbox or Supabase dashboard.
+                                </span>
+                            </>
+                        ) : errorMsg}
                     </div>
                 )}
 

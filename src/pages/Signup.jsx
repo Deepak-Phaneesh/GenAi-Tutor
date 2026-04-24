@@ -79,6 +79,24 @@ export default function Signup() {
         navigate('/app');
     };
 
+    const handleResendConfirmation = async () => {
+        if (!formData.email) return;
+        setLoading(true);
+        setErrorMsg('');
+        try {
+            const { error } = await supabase.auth.resend({
+                type: 'signup',
+                email: formData.email,
+            });
+            if (error) throw error;
+            alert('Verification email resent! Please check your inbox.');
+        } catch (error) {
+            setErrorMsg(error.message);
+        } finally {
+            setLoading(false);
+        }
+    };
+
     return (
         <div className="auth-container">
             <div className="auth-card glass-panel animate-fade-in">
@@ -224,8 +242,8 @@ export default function Signup() {
                                 <CheckCircle2 size={18} /> Simulate Email Verification
                             </button>
 
-                            <button type="button" className="btn btn-ghost mt-4 w-full text-sm">
-                                Didn't receive it? Click to resend.
+                            <button type="button" className="btn btn-ghost mt-4 w-full text-sm" onClick={handleResendConfirmation} disabled={loading}>
+                                {loading ? 'Sending...' : "Didn't receive it? Click to resend."}
                             </button>
                         </div>
                     )}

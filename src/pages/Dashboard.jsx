@@ -38,6 +38,7 @@ export default function Dashboard() {
     const { user } = useAuth();
     const [assessmentsTaken, setAssessmentsTaken] = useState([]);
     const [recentPaths, setRecentPaths] = useState([]);
+    const [showAllPaths, setShowAllPaths] = useState(false);
     const [userName, setUserName] = useState('');
 
     // Default metrics if DB is empty
@@ -384,31 +385,29 @@ export default function Dashboard() {
                         </div>
                         <div className="card-body">
                             {assessmentsTaken.length > 0 ? (
-                                <ul className="recent-list">
+                                <div className="widget-list">
                                     {assessmentsTaken.slice(0, 3).map((assessment, i) => (
-                                        <li key={i} className="list-item !p-4 !mb-2 last:!mb-0" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '8px' }}>
-                                            <div className="flex flex-col w-full text-left">
-                                                {/* Title */}
-                                                <div className="text-lg font-bold text-white mb-1">
+                                        <div key={i} className="widget-item cursor-pointer hover:bg-white/5 transition-colors" onClick={() => navigate('/app/assessments')}>
+                                            <div className="widget-icon" style={{ backgroundColor: '#10b98133' }}>
+                                                <CheckSquare style={{ color: '#10b981' }} size={18} />
+                                            </div>
+                                            <div className="widget-details w-full">
+                                                <h4 style={{ margin: 0, fontSize: '0.9rem', fontWeight: 600, color: 'var(--text-primary)' }}>
                                                     {assessment.skill}
-                                                </div>
-
-                                                {/* Progress Bar Row */}
-                                                <div className="progress-wrapper mb-1" style={{ marginTop: 0 }}>
+                                                </h4>
+                                                <div className="progress-wrapper" style={{ marginTop: '0.25rem', marginBottom: '0.25rem' }}>
                                                     <div className="progress-bar">
-                                                        <div className="progress-fill" style={{ width: `${assessment.score}%` }}></div>
+                                                        <div className="progress-fill" style={{ width: `${assessment.score}%`, backgroundColor: '#10b981' }}></div>
                                                     </div>
-                                                    <span className="progress-text">{assessment.score}%</span>
+                                                    <span className="progress-text" style={{ color: '#10b981', fontWeight: 600 }}>{assessment.score}%</span>
                                                 </div>
-
-                                                {/* Domain + Level */}
-                                                <div className="text-sm text-purple-400">
+                                                <div className="text-xs" style={{ color: 'var(--text-secondary)' }}>
                                                     {assessment.domain} • {assessment.level}
                                                 </div>
                                             </div>
-                                        </li>
+                                        </div>
                                     ))}
-                                </ul>
+                                </div>
                             ) : (
                                 <div className="empty-state py-8 flex items-center justify-center gap-3 text-center w-full min-h-[140px]">
                                     <CheckSquare size={28} className="text-primary opacity-80 flex-shrink-0" />
@@ -424,11 +423,15 @@ export default function Dashboard() {
                     <div className="dashboard-card glass-panel animate-fade-in" style={{ animationDelay: '0.7s' }}>
                         <div className="card-header">
                             <h3>Recent Paths</h3>
-                            <button className="btn-link">View All</button>
+                            {recentPaths.length > 5 && (
+                                <button className="btn-link" onClick={() => setShowAllPaths(!showAllPaths)}>
+                                    {showAllPaths ? 'Show Less' : 'View All'}
+                                </button>
+                            )}
                         </div>
                         <div className="widget-list">
                             {recentPaths.length > 0 ? (
-                                recentPaths.map(item => (
+                                (showAllPaths ? recentPaths : recentPaths.slice(0, 5)).map(item => (
                                     <div key={item.id} className="widget-item cursor-pointer hover:bg-white/5 transition-colors" onClick={() => navigate(`/app/generate-path?pathId=${item.id}`)}>
                                         <div className="widget-icon bg-primary-light">
                                             <TrendingUp className="text-primary" size={18} />

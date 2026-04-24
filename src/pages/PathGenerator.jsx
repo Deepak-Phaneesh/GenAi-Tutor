@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../lib/AuthContext';
 import { updateProgressMetric } from '../lib/progress';
@@ -300,7 +301,7 @@ This is weeks ${startWeek} to ${endWeek} of a ${currentForm.weeks}-week plan. ($
 Rules:
 1. STRICT PROGRESSION: These weeks (${startWeek}-${endWeek}) must build on previous weeks. Each week introduces entirely NEW, unique, and more advanced topics. DO NOT repeat topics.
 2. Each week must contain exactly 7 days (Day 1-6 learning, Day 7 is for assessment).
-3. Day Content: Detailed explanation of at least 5-6 lines long. Write it as a comprehensive study note covering what the topic is, why it matters, how it works, and a brief example or analogy. Use \\n\\n for paragraph breaks between sections.
+3. Day Content: Detailed and thorough explanation of at least 8-10 lines long. Expand on the details! Write it as a comprehensive study note covering what the topic is, why it matters, how it works, and a brief example or analogy. Use \n\n for paragraph breaks between sections.
 4. Resources: Every learning day MUST include an array of 2-3 real URL strings (documentation or tutorials).
 5. The curriculum must be SPECIFICALLY about "${currentForm.skill}". ${isNonProgrammingContext}
 
@@ -334,9 +335,9 @@ Return ONLY valid JSON: {"exam": [{"text": "...", "options": ["A", "B", "C", "D"
                 console.warn("Exam generation failed, continuing without exam:", err.message);
             }
 
-            // Generate weeks in chunks of 4
+            // Generate weeks individually to avoid token limits with long explanations
             const totalWeeks = parseInt(currentForm.weeks, 10) || 4;
-            const CHUNK_SIZE = 4;
+            const CHUNK_SIZE = 1;
             let allWeeks = [];
             
             for (let startWeek = 1; startWeek <= totalWeeks; startWeek += CHUNK_SIZE) {
@@ -1165,7 +1166,7 @@ Respond with ONLY a valid JSON object in this exact format, no extra text:
             </div>
 
                     {/* Weekly Assessment Live Modal */}
-            {activeWeeklyAssessment && (
+            {activeWeeklyAssessment && createPortal(
                 <div className="modal-overlay flex items-center justify-center p-4" style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.85)', zIndex: 2000, backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                     <div className="exam-card glass-panel w-full max-w-2xl animate-scale-up relative" style={{ maxHeight: '90vh', overflowY: 'auto' }}>
                         
@@ -1239,11 +1240,11 @@ Respond with ONLY a valid JSON object in this exact format, no extra text:
                         )}
                     </div>
                 </div>
-            )}
+            , document.body)}
 
             {/* Daily Subject Learning Modal */}
             {
-                activeLearningDay && activeLearningDay.data && (
+                activeLearningDay && activeLearningDay.data && createPortal(
                     <div className="fixed inset-0 bg-black bg-opacity-80 z-50 flex items-center justify-center backdrop-blur-sm" style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0,0,0,0.85)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                         <div ref={learningModalRef} className="exam-card glass-panel w-full max-w-3xl animate-fade-in mx-4" style={{ margin: 'auto', maxHeight: '90vh', overflowY: 'auto' }}>
                             <div className="text-center mb-6">
@@ -1252,45 +1253,47 @@ Respond with ONLY a valid JSON object in this exact format, no extra text:
                                 <p className="text-secondary mt-1">{activeLearningDay.data.duration}</p>
                             </div>
 
-                            <div className="learning-content text-left space-y-6">
-                                <div className="p-4 bg-dark rounded border border-light">
-                                    <h4 className="flex align-center gap-2 mb-2"><Sparkles size={18} className="text-primary" /> Explanation</h4>
-                                    <div className="text-sm leading-relaxed text-secondary" style={{ whiteSpace: 'pre-wrap' }}>
+                            <div className="learning-content text-left space-y-8 mt-4 px-2">
+                                <section className="mb-6">
+                                    <h4 className="flex align-center gap-2 mb-3 text-lg border-b border-light pb-2 text-white"><Sparkles size={20} className="text-primary" /> Explanation</h4>
+                                    <div className="text-base leading-loose" style={{ whiteSpace: 'pre-wrap', color: 'rgba(255,255,255,0.9)' }}>
                                         {activeLearningDay.data.content || activeLearningDay.data.explanation}
                                     </div>
-                                </div>
+                                </section>
 
                                 {activeLearningDay.data.key_concepts && (
-                                    <div className="mt-4">
-                                        <h4 className="flex align-center gap-2 mb-2"><BrainCircuit size={18} className="text-secondary" /> Key Concepts</h4>
+                                    <section className="mb-6">
+                                        <h4 className="flex align-center gap-2 mb-3 text-lg border-b border-light pb-2 text-white"><BrainCircuit size={20} className="text-secondary" /> Key Concepts</h4>
                                         <div className="flex flex-wrap gap-2">
                                             {activeLearningDay.data.key_concepts.map((concept, i) => (
-                                                <span key={i} className="badge bg-primary-light text-primary border border-primary">{concept}</span>
+                                                <span key={i} className="badge bg-white bg-opacity-5 text-white border border-light px-3 py-1.5">{concept}</span>
                                             ))}
                                         </div>
-                                    </div>
+                                    </section>
                                 )}
 
                                 {activeLearningDay.data.example && (
-                                    <div className="mt-4">
-                                        <h4 className="mb-2">Example</h4>
-                                        <pre className="p-3 bg-dark rounded border border-light text-sm overflow-x-auto text-success-light">
+                                    <section className="mb-6">
+                                        <h4 className="mb-3 text-lg text-white">Example</h4>
+                                        <pre className="p-5 bg-black bg-opacity-50 rounded-xl border border-light text-sm overflow-x-auto text-primary-light shadow-inner">
                                             {activeLearningDay.data.example}
                                         </pre>
-                                    </div>
+                                    </section>
                                 )}
 
                                 {activeLearningDay.data.practice_task && (
-                                    <div className="mt-4 p-4 border border-warning rounded bg-warning-light">
-                                        <h4 className="flex align-center gap-2 mb-2 text-warning"><CheckCircle2 size={18} /> Practice Task</h4>
-                                        <p className="text-sm">{activeLearningDay.data.practice_task}</p>
-                                    </div>
+                                    <section className="mb-6">
+                                        <div className="p-5 border border-warning border-opacity-50 rounded-xl bg-warning bg-opacity-10 shadow-sm">
+                                            <h4 className="flex align-center gap-2 mb-2 text-warning text-lg"><CheckCircle2 size={20} /> Practice Task</h4>
+                                            <p className="text-base leading-relaxed" style={{ color: 'rgba(255,255,255,0.85)' }}>{activeLearningDay.data.practice_task}</p>
+                                        </div>
+                                    </section>
                                 )}
 
                                 {activeLearningDay.data.resources && (
-                                    <div className="mt-4">
-                                        <h4 className="flex align-center gap-2 mb-3"><BookOpen size={18} className="text-secondary" /> Study Resources</h4>
-                                        <div className="grid grid-cols-1 gap-2">
+                                    <section className="mb-6">
+                                        <h4 className="flex align-center gap-2 mb-3 text-lg border-b border-light pb-2 text-white"><BookOpen size={20} className="text-secondary" /> Study Resources</h4>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                                             {activeLearningDay.data.resources.map((link, i) => {
                                                 const isYoutube = link.includes('youtube.com') || link.includes('youtu.be');
                                                 return (
@@ -1299,56 +1302,55 @@ Respond with ONLY a valid JSON object in this exact format, no extra text:
                                                         href={link}
                                                         target="_blank"
                                                         rel="noopener noreferrer"
-                                                        className="flex align-center gap-3 p-3 rounded bg-dark border border-light hover:border-primary transition-all text-sm group"
+                                                        className="flex align-center gap-3 p-4 rounded-xl bg-black bg-opacity-30 border border-light hover:border-primary hover:bg-primary-light transition-all text-sm group shadow-sm"
                                                     >
-                                                        {isYoutube ? <Youtube size={18} className="text-error" /> : <ExternalLink size={18} className="text-primary" />}
-                                                        <span className="text-secondary group-hover:text-primary truncate">{link}</span>
+                                                        {isYoutube ? <Youtube size={20} className="text-error flex-shrink-0" /> : <ExternalLink size={20} className="text-primary flex-shrink-0" />}
+                                                        <span className="text-secondary group-hover:text-primary truncate font-medium">{link}</span>
                                                     </a>
                                                 );
                                             })}
                                         </div>
-                                    </div>
+                                    </section>
                                 )}
                             </div>
 
-                             <div className="flex justify-between mt-8 pt-8 border-t border-light gap-8 items-start">
-                                {/* Left Side: Learning Actions */}
-                                <div className="flex-1 space-y-4">
+                             <div className="mt-8 pt-8 border-t border-light">
+                                {activeLearningDay.data.practice_suggestion && (
+                                    <div className="mb-6 p-6 bg-gradient-to-r from-primary-light to-transparent rounded-xl border border-primary border-opacity-40 shadow-lg">
+                                        <h4 className="flex align-center gap-2 mb-3 text-primary text-xl font-bold"><Terminal size={22} /> Interactive Practice</h4>
+                                        <p className="text-sm text-white opacity-90 mb-5 leading-relaxed">{activeLearningDay.data.practice_suggestion || activeLearningDay.data.practice_exercise}</p>
+                                        <button
+                                            className="btn btn-primary w-full md:w-auto shadow-lg text-base py-3 px-8"
+                                            onClick={() => handleStartPractice(activeLearningDay.data)}
+                                        >
+                                            <Code className="inline mr-2" size={18} /> Launch Coding Sandbox
+                                        </button>
+                                    </div>
+                                )}
+
+                                <div className="flex flex-col md:flex-row justify-between gap-4 mt-6">
                                     <div className="flex gap-3">
-                                        <button className="btn btn-outline" onClick={() => setActiveLearningDay(null)}>
+                                        <button className="btn btn-outline px-6" onClick={() => setActiveLearningDay(null)}>
                                             Read Later
                                         </button>
                                         <button
-                                            className="btn btn-outline flex align-center gap-2"
+                                            className="btn btn-outline flex align-center gap-2 px-6"
                                             onClick={() => startQuickQuiz(activeLearningDay.data.topic)}
                                         >
-                                            <Sparkles size={18} className="text-secondary" /> Quick Quiz
-                                        </button>
-                                        <button className="btn btn-primary btn-glow" onClick={handleFinishLearningDay}>
-                                            Mark as Complete & Close
+                                            <Sparkles size={18} className="text-primary" /> Quick Quiz
                                         </button>
                                     </div>
-
-                                    {activeLearningDay.data.practice_suggestion && (
-                                        <div className="p-4 bg-primary-light rounded border border-primary border-opacity-30">
-                                            <h4 className="flex align-center gap-2 mb-2 text-primary font-bold"><Terminal size={18} /> Interactive Practice</h4>
-                                            <p className="text-xs text-secondary mb-4 leading-relaxed">{activeLearningDay.data.practice_suggestion || activeLearningDay.data.practice_exercise}</p>
-                                            <button
-                                                className="btn btn-primary btn-sm w-full shadow-lg"
-                                                onClick={() => handleStartPractice(activeLearningDay.data)}
-                                            >
-                                                Launch Sandbox
-                                            </button>
-                                        </div>
-                                    )}
+                                    <button className="btn btn-primary btn-glow px-8" onClick={handleFinishLearningDay}>
+                                        <CheckCircle2 className="inline mr-2" size={18}/> Mark as Complete & Close
+                                    </button>
                                 </div>
                             </div>
                         </div>
                     </div>
-                )}
+                , document.body)}
 
             {/* Quick Quiz Overlay */}
-            {activeQuickQuiz && (
+            {activeQuickQuiz && createPortal(
                 <div className="fixed inset-0 bg-black bg-opacity-90 z-[1100] flex items-center justify-center p-4">
                     <div className="exam-card glass-panel w-full max-w-lg mb-0 relative">
                         <button
@@ -1430,7 +1432,7 @@ Respond with ONLY a valid JSON object in this exact format, no extra text:
                         )}
                     </div>
                 </div>
-            )}
+            , document.body)}
         </>
     );
 }
